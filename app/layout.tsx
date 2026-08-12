@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { NativeBridgeReady } from '@/components/native-bridge-ready'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
@@ -61,7 +62,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="bg-background">
-      <body className={`${inter.variable} font-sans antialiased`}>{children}</body>
+      <body className={`${inter.variable} font-sans antialiased`}>
+        {children}
+        {/* 앱 셸에 라우팅 준비 완료를 알린다. 브라우저에서는 아무 일도 하지 않는다. */}
+        <NativeBridgeReady />
+      </body>
     </html>
   )
 }
