@@ -70,7 +70,7 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
       <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
 
-      <div className="relative flex h-full items-end pb-24 md:items-center md:pb-0">
+      <div className="relative flex h-full items-end pb-28 md:items-center md:pb-0">
         <div className="max-w-2xl px-4 md:px-8 lg:px-16">
           <motion.div
             key={item.ratingKey}
@@ -123,29 +123,34 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
               </Link>
             </div>
           </motion.div>
+
+          {/* 점은 본문 흐름 안에 둔다. 히어로 하단에 절대배치하면 홈에서 아래 줄을
+              -mt 로 끌어올릴 때 "최근 추가" 제목과 겹친다(데스크탑 · 모바일 모두). */}
+          {items.length > 1 ? (
+            <div className="mt-8 flex items-center gap-2">
+              {items.map((entry, i) => (
+                <button
+                  key={entry.ratingKey}
+                  type="button"
+                  onClick={() => {
+                    go(i)
+                    setPaused(true)
+                  }}
+                  aria-label={`${i + 1}번째 작품 · ${entry.title}`}
+                  aria-current={i === index}
+                  className={cn(
+                    'h-1.5 rounded-full transition-all',
+                    i === index
+                      ? 'w-8 bg-primary'
+                      : 'w-1.5 bg-foreground/30 hover:bg-foreground/60',
+                  )}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {items.length > 1 ? (
-        <div className="absolute bottom-6 left-4 flex items-center gap-2 md:left-8 lg:left-16">
-          {items.map((entry, i) => (
-            <button
-              key={entry.ratingKey}
-              type="button"
-              onClick={() => {
-                go(i)
-                setPaused(true)
-              }}
-              aria-label={`${i + 1}번째 작품 · ${entry.title}`}
-              aria-current={i === index}
-              className={cn(
-                'h-1.5 rounded-full transition-all',
-                i === index ? 'w-8 bg-primary' : 'w-1.5 bg-foreground/30 hover:bg-foreground/60',
-              )}
-            />
-          ))}
-        </div>
-      ) : null}
     </section>
   )
 }

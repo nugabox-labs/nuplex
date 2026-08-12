@@ -65,12 +65,19 @@ case "$COMMAND" in
       echo "migrate: .env 가 없습니다." >&2
       exit 1
     fi
-    PG_USER="$(grep -E '^POSTGRES_USER=' .env | head -1 | cut -d= -f2-)"
-    PG_DB="$(grep -E '^POSTGRES_DB=' .env | head -1 | cut -d= -f2-)"
+    # .env 를 다른 기기에서 올리다 보면 CRLF 나 따옴표 · 앞뒤 공백이 섞인다.
+    # 그대로 쓰면 psql 이 "nuplex\r" 같은 이름을 찾다가 "database does not exist" 로 죽는다.
+    read_env() {
+      grep -E "^$1=" .env | head -1 | cut -d= -f2- \
+        | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+    }
+    PG_USER="$(read_env POSTGRES_USER)"
+    PG_DB="$(read_env POSTGRES_DB)"
     if [[ -z "$PG_USER" || -z "$PG_DB" ]]; then
       echo "migrate: .env 에서 POSTGRES_USER/POSTGRES_DB 를 읽지 못했습니다." >&2
       exit 1
     fi
+    echo "migrate: 대상 DB = ${PG_DB} (사용자 ${PG_USER})"
 
     # shellcheck disable=SC2086
     docker compose $FILES up -d db
@@ -90,6 +97,16 @@ case "$COMMAND" in
       # shellcheck disable=SC2086
       docker compose $FILES exec -T db psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 -q "$@"
     }
+
+    # postgres 이미지는 최초 initdb 때만 POSTGRES_DB 를 만든다. 볼륨이 이미 있거나
+    # 그때 값이 달랐으면 DB 가 없는 채로 서버만 떠 있다. 그 경우 여기서 만들어 준다.
+    # shellcheck disable=SC2086
+    if ! docker compose $FILES exec -T db psql -U "$PG_USER" -d "$PG_DB" -c '\q' >/dev/null 2>&1; then
+      echo "migrate: 데이터베이스 ${PG_DB} 가 없습니다. 생성합니다."
+      # shellcheck disable=SC2086
+      docker compose $FILES exec -T db psql -U "$PG_USER" -d postgres -v ON_ERROR_STOP=1 \
+        -c "CREATE DATABASE \"${PG_DB}\""
+    fi
 
     psql_run -c "CREATE TABLE IF NOT EXISTS schema_migrations (
       id text PRIMARY KEY,
