@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isSecureRequest } from '@/lib/auth/cookie'
 import { PROFILE_COOKIE, PROFILE_MAX_AGE_SECONDS, createProfileValue } from '@/lib/auth/session'
 import { getProfile, verifyProfileEmail } from '@/lib/profiles'
 
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
   response.cookies.set(PROFILE_COOKIE, await createProfileValue(profileId), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureRequest(request),
     path: '/',
     maxAge: PROFILE_MAX_AGE_SECONDS,
   })

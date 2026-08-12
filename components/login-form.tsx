@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
 // 열람용 · 관리자용 로그인 화면이 같은 폼을 쓴다. 다른 건 보낼 주소와 성공 후 갈 곳뿐이다.
@@ -12,7 +12,6 @@ export function LoginForm({
   endpoint?: string
   defaultNext?: string
 } = {}) {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -33,8 +32,10 @@ export function LoginForm({
       // 열린 곳이 외부 주소로 바뀌지 않도록 내부 경로만 받아들인다.
       const next = searchParams.get('next')
       const target = next && next.startsWith('/') && !next.startsWith('//') ? next : defaultNext
-      router.replace(target)
-      router.refresh()
+      // 클라이언트 라우팅(router.replace)을 쓰지 않는다. 방금 바뀐 것이 쿠키라서
+      // 전체 페이지 이동으로 서버가 새 쿠키로 다시 판단하게 해야 한다.
+      // replace 직후 refresh 를 부르면 진행 중인 이동이 취소돼 스피너만 남는다.
+      window.location.assign(target)
       return
     }
 

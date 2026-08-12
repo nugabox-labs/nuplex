@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import type { Profile } from '@/lib/profiles'
 import { cn } from '@/lib/utils'
@@ -10,7 +9,6 @@ import { cn } from '@/lib/utils'
 // 통과하면 1년짜리 쿠키에 담긴다 — 로그아웃하지 않는 한 다시 묻지 않는다.
 
 export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
-  const router = useRouter()
   const [selected, setSelected] = useState<Profile | null>(null)
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -29,8 +27,9 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
     })
 
     if (res.ok) {
-      router.replace('/')
-      router.refresh()
+      // 프로필 쿠키가 새로 생겼다. 전체 페이지 이동이라야 프록시가 이걸 보고
+      // 통과시킨다 — 클라이언트 라우팅으로는 선택 화면으로 되돌아온다.
+      window.location.assign('/')
       return
     }
     setError(((await res.json().catch(() => null)) as any)?.error ?? '확인하지 못했습니다.')
@@ -91,16 +90,16 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
   }
 
   return (
-    <div className="flex flex-wrap items-start justify-center gap-6 md:gap-10">
+    <div className="flex max-w-3xl flex-wrap items-start justify-center gap-x-5 gap-y-7 md:gap-x-7 md:gap-y-8">
       {profiles.map((profile) => (
         <button
           key={profile.id}
           type="button"
           onClick={() => setSelected(profile)}
-          className="group flex w-24 flex-col items-center gap-3 focus:outline-none md:w-28"
+          className="group flex w-20 flex-col items-center gap-2.5 focus:outline-none md:w-24"
         >
           <Avatar profile={profile} />
-          <span className="truncate text-sm text-muted-foreground transition group-hover:text-foreground">
+          <span className="w-full truncate text-center text-sm text-muted-foreground transition group-hover:text-foreground">
             {profile.name}
           </span>
         </button>
@@ -109,15 +108,22 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
   )
 }
 
-/** 아바타가 없는 사람이 있다(서버 접속 이력만 있는 계정). 이름 첫 글자로 대신한다. */
+/**
+ * 아바타가 없는 사람이 있다(서버 접속 이력만 있는 계정). 이름 첫 글자로 대신한다.
+ *
+ * 인원이 스무 명 가까이 되니 원형으로 작게 잡아 한 화면에 들어오게 한다.
+ * 그림자는 바깥으로 깔고 안쪽에 얇은 테두리를 둬서 어두운 배경에서 떠 보이게 한다.
+ */
 function Avatar({ profile, size = 'md' }: { profile: Profile; size?: 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'h-24 w-24 text-3xl' : 'h-24 w-24 text-3xl md:h-28 md:w-28'
+  const box = size === 'lg' ? 'h-20 w-20 text-2xl' : 'h-[4.5rem] w-[4.5rem] text-2xl md:h-20 md:w-20'
 
   return (
     <span
       className={cn(
-        'flex items-center justify-center overflow-hidden rounded-lg border-2 border-transparent bg-secondary font-bold text-muted-foreground transition',
-        size === 'md' && 'group-hover:border-primary group-focus-visible:border-primary',
+        'flex items-center justify-center overflow-hidden rounded-full bg-secondary font-bold text-muted-foreground',
+        'shadow-lg shadow-black/50 ring-1 ring-inset ring-white/10 transition duration-200',
+        size === 'md' &&
+          'group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-black/60 group-hover:ring-2 group-hover:ring-primary group-focus-visible:ring-2 group-focus-visible:ring-primary',
         box,
       )}
     >

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { ChevronDown, Home, Layers, LogOut, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LibrarySection } from '@/lib/library'
@@ -18,7 +18,6 @@ export function Navbar({
   groups: { group: string; sections: LibrarySection[] }[]
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const [scrolled, setScrolled] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const navRef = useRef<HTMLDivElement>(null)
@@ -49,8 +48,8 @@ export function Navbar({
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' })
-    router.replace('/login')
-    router.refresh()
+    // 쿠키를 지웠으니 전체 페이지 이동으로 서버가 다시 판단하게 한다.
+    window.location.assign('/login')
   }
 
   return (

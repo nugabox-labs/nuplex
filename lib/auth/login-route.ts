@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isSecureRequest } from '@/lib/auth/cookie'
 import { verifyPassword } from '@/lib/auth/password'
 import { cookieName, createSessionValue, maxAge, type SessionScope } from '@/lib/auth/session'
 
@@ -56,7 +57,7 @@ export async function handleLogin(
   response.cookies.set(cookieName(scope), await createSessionValue(scope), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureRequest(request),
     path: '/',
     maxAge: maxAge(scope),
   })
