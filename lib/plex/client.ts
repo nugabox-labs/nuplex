@@ -23,6 +23,44 @@ export function readPlexEnv(): PlexEnv {
   return { baseUrl: baseUrl.replace(/\/+$/, ''), token, clientId }
 }
 
+/**
+ * 일시적인 실패를 몇 번 다시 시도한다.
+ *
+ * NAS 에서 컨테이너의 DNS 가 가끔 `EAI_AGAIN` 을 던지는데, 그 한 번 때문에 동기화
+ * 전체가 죽고 있었다(실측: 300편짜리 섹션 250번째에서 죽고, 다음 실행이 200부터
+ * 다시 시작해 영영 못 넘어감). 네트워크 오류와 5xx · 429 만 다시 시도한다 —
+ * 404 같은 건 다시 해도 같다.
+ */
+async function withRetry<T>(label: string, task: () => Promise<T>): Promise<T> {
+  const delays = [1000, 3000, 9000, 20000]
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= delays.length; attempt += 1) {
+    try {
+      return await task()
+    } catch (error) {
+      lastError = error
+      if (error instanceof PlexHttpError && !error.retryable) throw error
+      if (attempt === delays.length) break
+
+      const wait = delays[attempt]
+      const reason = error instanceof Error ? error.message : String(error)
+      console.warn(`[sync] ${label} 실패 — ${Math.round(wait / 1000)}초 뒤 재시도 (${reason})`)
+      await new Promise((resolve) => setTimeout(resolve, wait))
+    }
+  }
+  throw lastError
+}
+
+class PlexHttpError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message)
+  }
+}
+
 /** Plex 응답의 MediaContainer 한 겹을 벗겨 돌려준다. */
 export async function plexGet<T = any>(
   env: PlexEnv,
@@ -38,23 +76,42 @@ export async function plexGet<T = any>(
     .join('&')
   const url = env.baseUrl + path + (query ? `?${query}` : '')
 
-  const res = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      'X-Plex-Token': env.token,
-      'X-Plex-Client-Identifier': env.clientId,
-      'X-Plex-Product': 'NUPLEX',
-      'X-Plex-Version': '0.1.0',
-    },
-    // 라이브러리가 크면 응답이 느리다. 넉넉히 준다.
-    signal: AbortSignal.timeout(120_000),
-  })
+  return withRetry(`Plex ${path}`, async () => {
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'X-Plex-Token': env.token,
+        'X-Plex-Client-Identifier': env.clientId,
+        'X-Plex-Product': 'NUPLEX',
+        'X-Plex-Version': '0.1.0',
+      },
+      // 라이브러리가 크면 응답이 느리다. 넉넉히 준다.
+      signal: AbortSignal.timeout(120_000),
+    })
 
-  if (!res.ok) {
-    throw new Error(`Plex ${path} 요청 실패 (${res.status} ${res.statusText})`)
-  }
-  const json = await res.json()
-  return json?.MediaContainer as T
+    if (!res.ok) {
+      throw new PlexHttpError(
+        `Plex ${path} 요청 실패 (${res.status} ${res.statusText})`,
+        res.status === 429 || res.status >= 500,
+      )
+    }
+    const json = await res.json()
+    return json?.MediaContainer as T
+  })
+}
+
+/** 이미지 내려받기도 같은 재시도를 태운다. sync/images.ts 에서 쓴다. */
+export function fetchWithRetry(label: string, url: string, init: RequestInit): Promise<Response> {
+  return withRetry(label, async () => {
+    const res = await fetch(url, init)
+    if (!res.ok) {
+      throw new PlexHttpError(
+        `${label} 실패 (${res.status})`,
+        res.status === 429 || res.status >= 500,
+      )
+    }
+    return res
+  })
 }
 
 /**

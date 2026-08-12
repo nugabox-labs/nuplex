@@ -51,7 +51,17 @@ async function main() {
   )
   if (!succeeded) {
     console.log('[sync] 성공 이력이 없습니다. 최초 전체 동기화를 시작합니다.')
-    await safeRun('full')
+    // 최초 채우기는 몇 시간짜리라 중간에 한 번 끊기면 다음 주기(30분)까지 놀게 된다.
+    // 커서가 남아 있으니 이어서 하면 되고, 끝날 때까지 붙잡고 있는다.
+    for (let attempt = 1; attempt <= 20; attempt += 1) {
+      await safeRun('full')
+      const done = await queryOne<{ id: string }>(
+        `SELECT id FROM sync_run WHERE status = 'ok' LIMIT 1`,
+      )
+      if (done) break
+      console.log(`[sync] 최초 동기화가 끝나지 않았습니다. 1분 뒤 이어서 진행합니다 (${attempt}회차)`)
+      await new Promise((resolve) => setTimeout(resolve, 60_000))
+    }
   }
 }
 

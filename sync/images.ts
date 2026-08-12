@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, rename, writeFile, access } from 'node:fs/promises'
 import path from 'node:path'
-import { imageUrl, type PlexEnv } from '@/lib/plex/client'
+import { fetchWithRetry, imageUrl, type PlexEnv } from '@/lib/plex/client'
 
 // 포스터 · 배경을 미리 받아 로컬 파일로 둔다. 화면이 Plex 를 실시간으로 찌르지 않게
 // 하는 것이 이 앱의 존재 이유다 — 토큰도 새지 않고, 그리드 한 화면에 수십 건이
@@ -55,11 +55,10 @@ export async function saveImage(
 
   const { width, height } = SIZES[kind]
   try {
-    const res = await fetch(imageUrl(env, plexPath, width, height), {
+    const res = await fetchWithRetry('이미지 내려받기', imageUrl(env, plexPath, width, height), {
       headers: { 'X-Plex-Token': env.token },
       signal: AbortSignal.timeout(60_000),
     })
-    if (!res.ok) return { file: null, downloaded: false }
 
     const buffer = Buffer.from(await res.arrayBuffer())
     if (buffer.length === 0) return { file: null, downloaded: false }

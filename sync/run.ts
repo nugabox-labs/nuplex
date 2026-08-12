@@ -41,6 +41,8 @@ const FULL_SWEEP_KEY = 'full_sweep_started_at'
 // 증분 조회에 겹침을 준다. Plex 의 updatedAt 과 우리 시계가 몇 초 어긋나도
 // 그 사이에 바뀐 항목을 놓치지 않는다.
 const OVERLAP_SECONDS = 300
+// 몇 건마다 진행 위치를 저장할지. 죽었을 때 다시 하는 양이 이만큼으로 제한된다.
+const CHECKPOINT_EVERY = 10
 
 export interface SyncResult {
   kind: SyncKind
@@ -198,10 +200,15 @@ async function syncSection(
       if (needsChildren) {
         result.episodesUpserted += await syncShowChildren(env, ratingKey, counter)
       }
+
+      // 커서를 촘촘히 옮긴다. 페이지(200건) 단위로만 저장하면 250번째에서 죽었을 때
+      // 다음 실행이 200부터 다시 시작하고, 같은 자리에서 또 죽으면 영영 못 넘어간다
+      // (실제로 NAS 에서 이 상태에 빠졌다).
+      if (result.itemsSeen % CHECKPOINT_EVERY === 0) {
+        await writeState(cursorKey, String(page.offset + index + 1))
+      }
     }
 
-    // 페이지를 다 처리한 뒤에 커서를 옮긴다. 중간에 죽으면 이 페이지를 다시 하지만,
-    // 모든 쓰기가 멱등이라 다시 해도 결과가 같다.
     await writeState(cursorKey, String(page.offset + page.items.length))
     console.log(
       `[sync] 섹션 "${section.title}" ${page.offset + page.items.length}/${page.totalSize}`,
