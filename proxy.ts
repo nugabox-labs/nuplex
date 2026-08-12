@@ -18,7 +18,9 @@ import {
 // 비밀번호를 통과하면 프로필을 고르게 한다. 알림을 사람별로 보내려면 "지금 누가
 // 보고 있는지" 를 알아야 하기 때문이다. 프로필 쿠키는 1년짜리라 한 번만 고르면 된다.
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login']
+// 앱 셸의 원격 설정은 로그인 전에 읽힌다. 셸은 이 응답을 보고 나서야 어느 주소를
+// 웹뷰에 띄울지 안다 — 여기에 인증을 걸면 앱이 부팅되지 않는다(docs/APP-INTEGRATION.md).
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/app/config']
 // 로그인은 됐지만 아직 프로필을 안 고른 상태에서도 열려 있어야 하는 곳.
 const PROFILE_PATHS = ['/profile', '/api/profile', '/api/auth/logout', '/media']
 const ADMIN_PUBLIC_PATHS = ['/admin/login', '/api/admin/login']

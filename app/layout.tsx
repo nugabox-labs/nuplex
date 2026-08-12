@@ -48,6 +48,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'dark',
   themeColor: '#0f0f0f',
+  // 앱 셸의 웹뷰가 노치 · 다이나믹 아일랜드 · 홈 인디케이터 영역까지 쓰게 한다.
+  // 이걸 켰으면 화면 가장자리에 붙는 UI 는 env(safe-area-inset-*) 로 여백을 줘야
+  // 잘리지 않는다 (docs/APP-INTEGRATION.md §2).
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({
