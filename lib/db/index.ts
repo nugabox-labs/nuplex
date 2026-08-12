@@ -11,7 +11,9 @@ function getPool(): Pool {
     if (!connectionString) {
       throw new Error('DATABASE_URL 이 설정되지 않았습니다.')
     }
-    pool = new Pool({ connectionString, max: 10 })
+    // 연결 타임아웃이 없으면 DB 에 닿지 못할 때 요청이 무한정 매달린다.
+    // 빌드 환경처럼 DB 가 아예 없는 곳에서는 빨리 실패하는 편이 낫다.
+    pool = new Pool({ connectionString, max: 10, connectionTimeoutMillis: 5000 })
   }
   return pool
 }
