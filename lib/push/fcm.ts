@@ -99,6 +99,22 @@ export type SendResult =
   | { ok: false; error: string; unregistered: boolean }
 
 /**
+ * 다시 시도해도 소용없는 토큰인가.
+ *
+ *   404 UNREGISTERED   앱을 지웠거나 토큰이 만료됨
+ *   400 INVALID_ARGUMENT + "registration token"
+ *                      토큰 자체가 망가짐. 영원히 실패한다
+ *
+ * 400 을 무조건 죽은 토큰으로 보면 안 된다 — 우리가 페이로드를 잘못 만들었을 때도
+ * 400 이 온다. 그 경우까지 기기를 무효 처리하면 멀쩡한 기기를 통째로 날린다.
+ * 그래서 메시지에 토큰 얘기가 있을 때만 죽은 것으로 판정한다.
+ */
+function isDeadToken(status: number, body: string): boolean {
+  if (status === 404 || body.includes('UNREGISTERED') || body.includes('NOT_FOUND')) return true
+  return status === 400 && /registration token/i.test(body)
+}
+
+/**
  * 한 기기에 보낸다.
  *
  * 라우팅에 필요한 값은 전부 `data` 에 담는다. iOS 백그라운드에서는 `notification` 만
@@ -145,11 +161,7 @@ export async function sendToToken(token: string, message: PushMessage): Promise<
     if (res.ok) return { ok: true }
 
     const text = await res.text()
-    // 앱을 지웠거나 토큰이 만료된 경우. 이런 토큰은 지워야 발송이 계속 느려지지 않는다
-    // (설계문서 §6.4 — 백엔드 책임으로 명시돼 있다).
-    const unregistered =
-      res.status === 404 || text.includes('UNREGISTERED') || text.includes('NOT_FOUND')
-    return { ok: false, error: `${res.status} ${text.slice(0, 300)}`, unregistered }
+    return { ok: false, error: `${res.status} ${text.slice(0, 300)}`, unregistered: isDeadToken(res.status, text) }
   } catch (error) {
     return {
       ok: false,
