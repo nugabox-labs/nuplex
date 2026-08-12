@@ -127,6 +127,128 @@ export function excludedSectionIds(): number[] {
     .filter((value) => Number.isInteger(value) && value > 0)
 }
 
+// --- 사용자 --------------------------------------------------------------
+// 한 곳으로는 전원을 못 모은다. 세 곳을 계정 id 로 합쳐야 이름 · 이메일 · 아바타가 다 찬다.
+//
+//   plex.tv/api/v2/home/users  Home 사용자. 이메일 · 아바타 있음
+//   plex.tv/api/users (XML)    공유 친구.   이메일 · 아바타 있음
+//   <PMS>/accounts             서버 접속 이력. 이름만 있음(아바타 없음)
+//
+// 실측(2026-08-12): Home 9 + 친구 16 + 서버 22 → 합쳐서 23명, 아바타 17명.
+
+export interface PlexUser {
+  id: number
+  name: string
+  username: string | null
+  email: string | null
+  thumb: string | null
+  isHome: boolean
+  isFriend: boolean
+  isServer: boolean
+  isAdmin: boolean
+}
+
+/** XML 속성을 뽑는다. plex.tv 의 친구 목록은 아직 XML 만 준다. */
+function parseXmlUsers(xml: string): Record<string, string>[] {
+  return [...xml.matchAll(/<User\s([^>]*?)\/?>/g)].map((match) => {
+    const attrs: Record<string, string> = {}
+    for (const kv of match[1].matchAll(/(\w+)="([^"]*)"/g)) attrs[kv[1]] = kv[2]
+    return attrs
+  })
+}
+
+function emptyToNull(value: unknown): string | null {
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text.length > 0 ? text : null
+}
+
+export async function fetchPlexUsers(env: PlexEnv): Promise<PlexUser[]> {
+  const headers = {
+    'X-Plex-Token': env.token,
+    'X-Plex-Client-Identifier': env.clientId,
+    'X-Plex-Product': 'NUPLEX',
+  }
+  const merged = new Map<number, PlexUser>()
+
+  const put = (id: number, patch: Partial<PlexUser> & { name?: string }) => {
+    const existing = merged.get(id)
+    if (existing) {
+      // 먼저 채워진 값을 유지한다 — Home · 친구 쪽이 서버 계정보다 정보가 많다.
+      existing.name = existing.name || patch.name || ''
+      existing.username ??= patch.username ?? null
+      existing.email ??= patch.email ?? null
+      existing.thumb ??= patch.thumb ?? null
+      existing.isHome ||= patch.isHome ?? false
+      existing.isFriend ||= patch.isFriend ?? false
+      existing.isServer ||= patch.isServer ?? false
+      existing.isAdmin ||= patch.isAdmin ?? false
+      return
+    }
+    merged.set(id, {
+      id,
+      name: patch.name ?? '',
+      username: patch.username ?? null,
+      email: patch.email ?? null,
+      thumb: patch.thumb ?? null,
+      isHome: patch.isHome ?? false,
+      isFriend: patch.isFriend ?? false,
+      isServer: patch.isServer ?? false,
+      isAdmin: patch.isAdmin ?? false,
+    })
+  }
+
+  // 1) Home 사용자
+  const home = await withRetry('plex.tv home/users', async () => {
+    const res = await fetch('https://plex.tv/api/v2/home/users', {
+      headers: { ...headers, Accept: 'application/json' },
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!res.ok) throw new PlexHttpError(`home/users (${res.status})`, res.status >= 500)
+    return res.json()
+  })
+  for (const u of home?.users ?? []) {
+    put(Number(u.id), {
+      name: emptyToNull(u.title) ?? emptyToNull(u.friendlyName) ?? emptyToNull(u.username) ?? '',
+      username: emptyToNull(u.username),
+      email: emptyToNull(u.email),
+      thumb: emptyToNull(u.thumb),
+      isHome: true,
+      isAdmin: Boolean(u.admin),
+    })
+  }
+
+  // 2) 공유 친구 (XML)
+  const friendsXml = await withRetry('plex.tv users', async () => {
+    const res = await fetch('https://plex.tv/api/users', {
+      headers: { ...headers, Accept: 'application/xml' },
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!res.ok) throw new PlexHttpError(`api/users (${res.status})`, res.status >= 500)
+    return res.text()
+  })
+  for (const f of parseXmlUsers(friendsXml)) {
+    const id = Number(f.id)
+    if (!Number.isFinite(id)) continue
+    put(id, {
+      name: emptyToNull(f.title) ?? emptyToNull(f.username) ?? '',
+      username: emptyToNull(f.username),
+      email: emptyToNull(f.email),
+      thumb: emptyToNull(f.thumb),
+      isFriend: true,
+    })
+  }
+
+  // 3) 서버 접속 계정. id 0 · 1 은 시스템 계정이라 뺀다.
+  const accounts = await plexGet(env, '/accounts')
+  for (const a of accounts?.Account ?? []) {
+    const id = Number(a.id)
+    if (!Number.isFinite(id) || id <= 1) continue
+    put(id, { name: emptyToNull(a.name) ?? '', isServer: true })
+  }
+
+  return [...merged.values()].filter((user) => user.name.length > 0)
+}
+
 export interface PlexSection {
   key: string
   title: string

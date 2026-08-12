@@ -1,5 +1,5 @@
 import { db, queryOne } from '@/lib/db'
-import type { PlexEnv } from '@/lib/plex/client'
+import type { PlexEnv, PlexUser } from '@/lib/plex/client'
 import { createLimiter, saveImage, type ImageKind } from './images'
 
 // Plex 응답 한 건을 DB 한 행으로 옮기는 계층. Plex 의 필드 이름과 우리 컬럼 이름을
@@ -393,6 +393,68 @@ export async function upsertCollection(
       [ratingKey, String(child.ratingKey), order++],
     )
   }
+}
+
+/**
+ * Plex 사용자 목록을 반영한다.
+ *
+ * `profile` 행도 같이 만들어 두되 기본은 숨김이다. 관리자가 켠 사람만 선택 화면에 나온다 —
+ * 서버에 접속만 해본 옛 계정까지 다 뜨면 고르기가 곤란하다.
+ */
+export async function upsertPlexUsers(
+  env: PlexEnv,
+  users: PlexUser[],
+  counter: ImageCounter,
+): Promise<number> {
+  const boundary = new Date()
+
+  for (const user of users) {
+    const avatarFile = await image(env, 'avatars', user.thumb, counter)
+
+    await db.query(
+      `INSERT INTO plex_account (
+         id, name, username, email, is_home, is_friend, is_server, is_admin,
+         avatar_file, synced_at, deleted_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), NULL)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         username = COALESCE(EXCLUDED.username, plex_account.username),
+         email = COALESCE(EXCLUDED.email, plex_account.email),
+         is_home = EXCLUDED.is_home,
+         is_friend = EXCLUDED.is_friend,
+         is_server = EXCLUDED.is_server,
+         is_admin = EXCLUDED.is_admin,
+         avatar_file = COALESCE(EXCLUDED.avatar_file, plex_account.avatar_file),
+         synced_at = now(),
+         deleted_at = NULL`,
+      [
+        user.id,
+        user.name,
+        user.username,
+        user.email,
+        user.isHome,
+        user.isFriend,
+        user.isServer,
+        user.isAdmin,
+        avatarFile,
+      ],
+    )
+
+    // 프로필 자리를 만들어 둔다. 이미 있으면 관리자가 손댄 값을 건드리지 않는다.
+    await db.query(
+      `INSERT INTO profile (plex_account_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [user.id],
+    )
+  }
+
+  // Plex 에서 사라진 계정은 숨긴다. 프로필은 남겨둔다 — 관리자가 붙여둔 설정이 있을 수 있다.
+  await db.query(
+    `UPDATE plex_account SET deleted_at = now()
+      WHERE deleted_at IS NULL AND synced_at < $1`,
+    [boundary],
+  )
+
+  return users.length
 }
 
 /** 동기화 커서 — 중간에 죽어도 다음 실행이 여기서부터 이어받는다. */

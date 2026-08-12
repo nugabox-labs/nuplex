@@ -26,6 +26,7 @@ async function safeRun(kind: SyncKind) {
     console.log(
       `[sync] 완료 (${result.kind}) — 항목 ${result.itemsUpserted}건 · ` +
         `에피소드 ${result.episodesUpserted}건 · 컬렉션 ${result.collectionsUpserted}개 · ` +
+        `사용자 ${result.usersUpserted}명 · ` +
         `이미지 ${result.imagesSaved}장 · ` +
         `삭제 ${result.itemsDeleted}건`,
     )

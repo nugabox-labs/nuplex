@@ -6,6 +6,7 @@ import {
   excludedSectionIds,
   fetchCollectionChildren,
   fetchCollections,
+  fetchPlexUsers,
   fetchSections,
   iterateSectionItems,
   readPlexEnv,
@@ -18,6 +19,7 @@ import {
   upsertItemDetail,
   upsertItemShallow,
   upsertCollection,
+  upsertPlexUsers,
   upsertSeason,
   upsertSection,
   writeState,
@@ -50,6 +52,7 @@ export interface SyncResult {
   itemsUpserted: number
   episodesUpserted: number
   collectionsUpserted: number
+  usersUpserted: number
   imagesSaved: number
   itemsDeleted: number
 }
@@ -71,6 +74,7 @@ export async function runSync(kind: SyncKind): Promise<SyncResult> {
     itemsUpserted: 0,
     episodesUpserted: 0,
     collectionsUpserted: 0,
+    usersUpserted: 0,
     imagesSaved: 0,
     itemsDeleted: 0,
   }
@@ -107,6 +111,15 @@ export async function runSync(kind: SyncKind): Promise<SyncResult> {
       if (removed.rowCount) {
         console.log(`[sync] 제외 섹션 ${removed.rowCount}개를 정리했습니다 (${excluded.join(', ')})`)
       }
+    }
+
+    // 사용자 목록은 작품과 무관하고 호출도 몇 번뿐이라 앞에서 한 번에 끝낸다.
+    // 여기서 실패해도 라이브러리 동기화까지 막을 이유는 없다.
+    try {
+      result.usersUpserted = await upsertPlexUsers(env, await fetchPlexUsers(env), counter)
+      console.log(`[sync] Plex 사용자 ${result.usersUpserted}명`)
+    } catch (error) {
+      console.error('[sync] 사용자 목록을 받지 못했습니다:', error)
     }
 
     const sections = (await fetchSections(env)).filter(
@@ -327,7 +340,8 @@ if (process.argv[1]?.endsWith('run.ts')) {
     .then((r) => {
       console.log(
         `[sync] 완료 (${r.kind}) — 항목 ${r.itemsUpserted}건 · 에피소드 ${r.episodesUpserted}건 · ` +
-          `컬렉션 ${r.collectionsUpserted}개 · 이미지 ${r.imagesSaved}장 · 삭제 ${r.itemsDeleted}건`,
+          `컬렉션 ${r.collectionsUpserted}개 · 사용자 ${r.usersUpserted}명 · ` +
+          `이미지 ${r.imagesSaved}장 · 삭제 ${r.itemsDeleted}건`,
       )
       process.exit(0)
     })

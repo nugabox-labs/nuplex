@@ -7,7 +7,7 @@ import { fetchWithRetry, imageUrl, type PlexEnv } from '@/lib/plex/client'
 // 하는 것이 이 앱의 존재 이유다 — 토큰도 새지 않고, 그리드 한 화면에 수십 건이
 // NAS 로 몰리는 일도 없다.
 
-export type ImageKind = 'posters' | 'backdrops' | 'seasons' | 'episodes' | 'people'
+export type ImageKind = 'posters' | 'backdrops' | 'seasons' | 'episodes' | 'people' | 'avatars'
 
 // 종류별 저장 크기. 화면에서 쓰는 최대 크기에 맞춘다.
 const SIZES: Record<ImageKind, { width: number; height: number }> = {
@@ -16,6 +16,7 @@ const SIZES: Record<ImageKind, { width: number; height: number }> = {
   seasons: { width: 300, height: 450 },
   episodes: { width: 480, height: 270 },
   people: { width: 160, height: 160 },
+  avatars: { width: 200, height: 200 },
 }
 
 function mediaDir(): string {
@@ -54,8 +55,13 @@ export async function saveImage(
   if (await exists(absolute)) return { file: relative, downloaded: false }
 
   const { width, height } = SIZES[kind]
+  // 아바타는 plex.tv 의 절대 URL 이라 우리 서버의 사진 트랜스코더를 못 태운다. 원본을 받는다.
+  const source = plexPath.startsWith('http')
+    ? plexPath
+    : imageUrl(env, plexPath, width, height)
+
   try {
-    const res = await fetchWithRetry('이미지 내려받기', imageUrl(env, plexPath, width, height), {
+    const res = await fetchWithRetry('이미지 내려받기', source, {
       headers: { 'X-Plex-Token': env.token },
       signal: AbortSignal.timeout(60_000),
     })
