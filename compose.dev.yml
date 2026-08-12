@@ -1,0 +1,25 @@
+# 개발 모드 오버레이 — 소스를 마운트해 핫리로드로 띄운다.
+# ports: 를 절대 넣지 않는다. Compose 는 포트 목록을 append 하므로 이중 바인딩으로 실패한다 — AGENTS.md §4
+
+services:
+  web:
+    build:
+      target: deps
+    command: npm run dev
+    volumes:
+      - .:/app
+      # 익명 볼륨. 이미지를 다시 빌드해도 재사용되므로 compose.sh 가 항상
+      # --renew-anon-volumes 를 붙인다 — AGENTS.md §4
+      - /app/node_modules
+      - ./data/media:/app/data/media:ro
+    environment:
+      NODE_ENV: development
+
+  sync:
+    build:
+      target: deps
+    command: npx tsx sync/worker.ts
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./data/media:/app/data/media

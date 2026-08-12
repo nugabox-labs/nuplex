@@ -1,0 +1,19 @@
+# 의존성 · 빌드 산출물
+node_modules
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# 환경변수 (dev/prod 동일한 값을 쓰되 커밋은 하지 않는다 — AGENTS.md §2)
+.env
+.env*.local
+
+# compose.sh 가 남기는 기동 모드 상태
+.compose_state
+
+# 동기화 산출물 (포스터 · 배경 이미지) · 배포 기록
+data/
+.last_deploy_commit
+
+# OS
+.DS_Store

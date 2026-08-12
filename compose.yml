@@ -1,0 +1,53 @@
+name: nuplex
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: web
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # 유일한 외부 접속 포트. 역방향 프록시 대상 — AGENTS.md §3
+      - "2620:2620"
+    volumes:
+      # 동기화가 받아둔 포스터 · 배경을 web 이 정적 파일로 서빙한다(읽기 전용)
+      - ./data/media:/app/data/media:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  sync:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: sync
+    restart: unless-stopped
+    env_file: .env
+    # 포트를 열지 않는다. Plex 토큰을 쥔 유일한 컨테이너다.
+    volumes:
+      - ./data/media:/app/data/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # 최초 initdb 에만 적용된다. 나중에 바꾸려면 덤프/복원이 필요하다 — AGENTS.md §4
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=icu --icu-locale=ko-KR --locale=C"
+    ports:
+      - "2621:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db-data:
