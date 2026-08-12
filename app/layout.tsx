@@ -18,10 +18,13 @@ export const metadata: Metadata = {
   },
   description: DESCRIPTION,
   applicationName: 'NUPLEX',
+  // SVG 아이콘을 같이 선언하면 브라우저가 그쪽을 우선한다. v0 목업이 남긴
+  // icon.svg 가 그래서 파비콘 자리에 계속 나왔다 — PNG 하나만 둔다.
   icons: {
+    // 탭 파비콘은 64px 짜리로 충분하다. 1024 원본을 매번 받게 하면 236KB 를 버린다.
     icon: [
+      { url: '/icon-64.png', type: 'image/png', sizes: '64x64' },
       { url: '/icon.png', type: 'image/png', sizes: '1024x1024' },
-      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: '/icon.png',
   },

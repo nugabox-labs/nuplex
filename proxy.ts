@@ -65,6 +65,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // Next.js 내부 자산과 파비콘 · OG 이미지는 검사하지 않는다(OG 는 외부 미리보기가 읽어야 한다).
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon.svg|apple-icon.png|og.png|manifest.webmanifest).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon-64.png|apple-icon.png|og.png).*)',
   ],
 }
