@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server'
-import { listNotices } from '@/lib/notices'
+import { NextResponse, type NextRequest } from 'next/server'
+import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
+import { listNoticesFor } from '@/lib/notices'
 
-// 종 아이콘이 읽는 목록. 열람 세션만 있으면 된다(proxy 가 이미 막고 있다).
+// 종 아이콘이 읽는 목록. 내 프로필이 대상인 것과 전체 발송분만 돌려준다.
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  return NextResponse.json({ notices: await listNotices() })
+export async function GET(request: NextRequest) {
+  const profileId = await readProfileValue(request.cookies.get(PROFILE_COOKIE)?.value)
+  return NextResponse.json({ notices: await listNoticesFor(profileId) })
 }

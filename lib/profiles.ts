@@ -10,8 +10,10 @@ export interface Profile {
   id: number
   name: string
   avatar: string | null
-  /** 첫 진입 확인에 쓸 이메일이 등록돼 있는지. 값 자체는 화면에 내보내지 않는다 */
+  /** 첫 진입 확인에 쓸 이메일이 등록돼 있는지 */
   hasEmail: boolean
+  /** 힌트로 보여줄 가린 이메일. 본인은 알아보되 남에게는 단서가 안 되게 한다 */
+  maskedEmail: string | null
 }
 
 /** 관리자 화면에서만 쓰는, 이메일까지 보이는 형태. */
@@ -62,12 +64,25 @@ function effectiveEmail(row: ProfileRow): string | null {
   return row.email_override?.trim() || row.plex_email?.trim() || null
 }
 
+/**
+ * `gongdo4@gmail.com` → `g******@g******`
+ *
+ * 별 개수를 실제 길이에 맞추지 않는다. 길이도 단서가 되기 때문에 항상 6개로 고정한다.
+ */
+function maskEmail(email: string | null): string | null {
+  if (!email) return null
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return null
+  return `${local[0]}${'*'.repeat(6)}@${domain[0]}${'*'.repeat(6)}`
+}
+
 function toProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
     name: displayName(row),
     avatar: row.avatar_file ? `/media/${row.avatar_file}` : null,
     hasEmail: effectiveEmail(row) !== null,
+    maskedEmail: maskEmail(effectiveEmail(row)),
   }
 }
 

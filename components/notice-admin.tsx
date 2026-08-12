@@ -1,14 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Sparkles, Trash2 } from 'lucide-react'
+import { Loader2, Send, Sparkles, Trash2, Users } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/format'
+import type { Profile } from '@/lib/profiles'
+import { cn } from '@/lib/utils'
 
 interface Notice {
   id: string
   title: string
   body: string
   publishedAt: string
+  targetProfileIds?: number[]
 }
 
 export function NoticeAdmin() {
@@ -18,6 +21,9 @@ export function NoticeAdmin() {
   const [days, setDays] = useState(7)
   const [pending, setPending] = useState<null | 'draft' | 'submit'>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  // 비어 있으면 전체 발송이다.
+  const [targets, setTargets] = useState<number[]>([])
 
   const load = useCallback(async () => {
     const res = await fetch('/api/admin/notices')
@@ -26,7 +32,15 @@ export function NoticeAdmin() {
 
   useEffect(() => {
     void load()
+    void fetch('/api/admin/profiles')
+      .then((res) => (res.ok ? res.json() : { profiles: [] }))
+      .then((data) => setProfiles((data.profiles ?? []).filter((p: any) => p.enabled)))
   }, [load])
+
+  const toggleTarget = (id: number) =>
+    setTargets((current) =>
+      current.includes(id) ? current.filter((v) => v !== id) : [...current, id],
+    )
 
   async function makeDraft() {
     setPending('draft')
@@ -50,13 +64,23 @@ export function NoticeAdmin() {
     const res = await fetch('/api/admin/notices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, body }),
+      body: JSON.stringify({ title, body, targetProfileIds: targets }),
     })
 
     if (res.ok) {
+      const { delivery } = (await res.json()) as {
+        delivery: { queued: number; sent: number; failed: number; configured: boolean }
+      }
       setTitle('')
       setBody('')
-      setMessage('알림을 보냈습니다.')
+      setTargets([])
+      setMessage(
+        delivery.configured
+          ? `알림을 보냈습니다. 푸시 ${delivery.sent}건 성공 · ${delivery.failed}건 실패`
+          : delivery.queued > 0
+            ? `알림을 올렸습니다. 푸시 ${delivery.queued}건은 FCM 키가 설정되면 발송됩니다.`
+            : '알림을 올렸습니다. 아직 등록된 앱 기기가 없습니다.',
+      )
       await load()
     } else {
       setMessage(((await res.json().catch(() => null)) as any)?.error ?? '보내지 못했습니다.')
@@ -116,13 +140,61 @@ export function NoticeAdmin() {
           className="w-full resize-y rounded-md border border-border bg-secondary/60 px-4 py-3 font-mono text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
 
+        <div className="rounded-md border border-border bg-secondary/30 p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Users className="h-4 w-4 text-primary" />
+            받는 사람
+            <span className="font-normal text-muted-foreground">
+              {targets.length === 0 ? '전체' : `${targets.length}명 선택`}
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setTargets([])}
+              className={cn(
+                'rounded-full px-3 py-1 text-sm font-medium transition',
+                targets.length === 0
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border text-muted-foreground hover:text-foreground',
+              )}
+            >
+              전체
+            </button>
+            {profiles.map((profile) => (
+              <button
+                key={profile.id}
+                type="button"
+                onClick={() => toggleTarget(profile.id)}
+                className={cn(
+                  'rounded-full px-3 py-1 text-sm font-medium transition',
+                  targets.includes(profile.id)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'border border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {profile.name}
+              </button>
+            ))}
+          </div>
+          {profiles.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              켜진 프로필이 없습니다. 프로필 탭에서 먼저 켜 주세요.
+            </p>
+          ) : null}
+        </div>
+
         <div className="flex items-center gap-3">
           <button
             type="submit"
             disabled={pending !== null || !title.trim() || !body.trim()}
             className="flex items-center gap-2 rounded-md bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
           >
-            {pending === 'submit' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {pending === 'submit' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
             알림 보내기
           </button>
           {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
@@ -153,6 +225,13 @@ export function NoticeAdmin() {
                     </button>
                   </div>
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  받는 사람 {notice.targetProfileIds?.length
+                    ? notice.targetProfileIds
+                        .map((id) => profiles.find((p) => p.id === id)?.name ?? `#${id}`)
+                        .join(' · ')
+                    : '전체'}
+                </p>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
                   {notice.body}
                 </p>

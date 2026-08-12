@@ -57,8 +57,13 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
           <Avatar profile={selected} size="lg" />
           <p className="mt-4 text-xl font-bold text-foreground">{selected.name}</p>
           <p className="mt-2 text-center text-sm text-muted-foreground">
-            처음이시네요. 본인 확인을 위해 Plex 가입 이메일을 입력해 주세요.
+            가입한 이메일을 입력하세요
           </p>
+          {selected.maskedEmail ? (
+            <p className="mt-1 font-mono text-sm tracking-wide text-primary">
+              {selected.maskedEmail}
+            </p>
+          ) : null}
         </div>
 
         <input
