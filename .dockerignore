@@ -1,0 +1,11 @@
+# 빌드 컨텍스트에서 뺄 것. 이미지는 빌드 산출물(.next/standalone · public)과
+# lib · sync 만 쓰므로 아래는 하나도 필요 없다.
+#
+# data 를 빼는 이유가 특히 크다 — 동기화가 받아둔 포스터가 1GB 를 넘는다.
+# 컨텍스트로 통째로 넘어가면 빌드가 그만큼 느려지고, 워크트리처럼 data 가
+# 심볼릭 링크인 곳에서는 깨진 링크가 이미지에 들어가 next build 가 죽는다.
+# node_modules 도 뺀다. COPY . . 가 deps 단계에서 설치한 것을 덮어써 버린다.
+node_modules
+.next
+data
+.git
