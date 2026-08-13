@@ -71,6 +71,26 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* 누를 수 있는 것에는 손 모양 커서를 준다.
+     브라우저 기본은 <button> 에 화살표 커서라, Tailwind 가 아무것도 안 깔면
+     화면 대부분(로그인 · 프로필 · 칩 · 화살표 · 종 아이콘)이 안 눌리는 것처럼 보인다.
+     컴포넌트마다 cursor-pointer 를 붙이는 대신 여기서 한 번에 정한다. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* 못 누르는 상태는 그렇게 보여야 한다(빈 비밀번호일 때의 입장 버튼 등). */
+  button:disabled,
+  [aria-disabled='true'],
+  select:disabled {
+    cursor: not-allowed;
+  }
   /* Hide horizontal scrollbars on content rows while keeping scroll */
   /* 로고는 Inter 를 유지한다 */
   .font-logo {
