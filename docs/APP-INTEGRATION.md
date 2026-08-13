@@ -14,6 +14,7 @@
 | 푸시 DB · 발송 · 토큰 등록 | `database/0004_push.sql`, `lib/push/`, `lib/devices.ts`, `app/api/app/push/` | 푸시 백엔드 |
 | 공지 → 푸시 연결 | `lib/notices.ts`, `app/api/admin/notices/`, `components/notice-admin.tsx` | 푸시 백엔드 |
 | 프로필 | `lib/profiles.ts`, `components/profile-picker.tsx` | 프로필 |
+| 채팅 · 채팅 푸시 | `database/0006_chat.sql`, `lib/chat.ts`, `app/api/chat/`, `components/chat-panel.tsx` | 채팅 ([CHAT.md](CHAT.md)) |
 | 원격 설정 API | `app/api/app/config/route.ts` | 앱 셸 |
 | 셸 대응 (뷰포트 · 캐시) | `app/layout.tsx`, `next.config.mjs` | 앱 셸 |
 
@@ -76,6 +77,9 @@ iOS 백그라운드에서는 `notification` 만 오면 JS 리스너가 안 불�
 
 `route` 는 완전한 URL 이 아니라 **경로**다. 셸이 `webBaseUrl + route` 로 조립하므로
 도메인이 바뀌어도 과거에 보낸 알림이 깨지지 않는다.
+
+채팅도 같은 형식으로 나간다(`type: "chat"`). 계약은 [CHAT.md §4](CHAT.md#4-푸시-페이로드).
+셸은 **모르는 `type` 이 와도 죽지 않아야 한다** — 앞으로 종류가 더 늘어난다.
 
 ### 죽은 토큰 정리
 

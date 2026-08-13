@@ -35,9 +35,13 @@ docs/ 전체를 읽지 말 것.
 
 ## 2. 항상 적용 (docs를 열기 전에도 지킨다)
 - **DB**: CREATE/ALTER는 사람 컨펌 전 금지. 산출물은 `database/` 만.
-- **DB는 Plex 의 사본이다**: `notice` 하나를 빼면 모든 행을 sync 워커가 다시 만들 수 있다.
-  `notice` 는 사람이 만드는 유일한 데이터라 동기화로 복구되지 않는다 — 백업 대상은 이것뿐이다.
-  이 원칙을 깨는 테이블(찜 목록 등)을 더 추가하려면 먼저 상의한다.
+- **DB는 대부분 Plex 의 사본이다**: 아래 목록을 빼면 모든 행을 sync 워커가 다시 만들 수 있다.
+  사람이 만드는 데이터는 동기화로 복구되지 않는다 — **백업 대상은 이것뿐이다.**
+  · `notice` · `notice_target` — 알림
+  · `profile` — 표시 이름 · 이메일 보정 · 노출 여부
+  · `featured_series` — 연재 중인 시리즈 (`database/0005_featured_series.sql`)
+  · `conversation` · `message` · `conversation_read` — 채팅 (`docs/CHAT.md`)
+  이 목록을 늘리는 테이블(찜 목록 등)을 더 추가하려면 먼저 상의한다.
 - **라이브러리 분류는 Plex 것을 그대로 쓴다**: 섹션 제목 `구분 | 하위`(예: `영화 | 한국`)가
   곧 메뉴 계층이다. 우리가 새로 묶거나 이름을 바꾸지 않는다. 안 보일 섹션은 코드가 아니라
   `.env` 의 `EXCLUDED_SECTION_IDS` 로 뺀다.
@@ -143,6 +147,7 @@ sync 워커는 포트를 열지 않는다.
 | `docs/PLEX-SETUP.md` | Plex 쪽 설정 · 토큰 발급 · API 엔드포인트를 확인할 때 |
 | `docs/SECURITY.md` | 비밀번호 · 세션 · 공개 범위를 손댈 때 |
 | `docs/NOTICES.md` | 알림 · 관리자 화면 · 프로필별 발송을 손댈 때 |
+| `docs/CHAT.md` | 채팅 · SSE 실시간 전송 · 채팅 푸시를 손댈 때 |
 | `docs/APP-INTEGRATION.md` | 앱(nuplex-app)과의 계약 · 푸시 페이로드를 손댈 때 |
 | `docs/FIREBASE-SETUP.md` | 푸시 자격증명을 설정할 때 |
 | `database/*.sql` | 스키마 확인. 마이그레이션은 파일명 순으로 한 번씩만 적용된다 |

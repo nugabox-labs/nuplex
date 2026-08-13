@@ -163,6 +163,42 @@ export async function deliverNotice(noticeId: string): Promise<DeliveryResult> {
   return result
 }
 
+/**
+ * 새 채팅 메시지를 받는 사람의 기기로 보낸다.
+ *
+ * 발송 이력을 남기지 않는 것이 알림(notice)과 다르다 — 채팅은 메시지 자체가 DB 에
+ * 남아 있고, 못 받은 푸시는 앱을 열면 목록에서 그대로 보인다. 기기 × 메시지만큼
+ * 행을 쌓을 이유가 없다.
+ *
+ * collapseKey 를 대화 단위로 묶어서, 안 읽은 사이에 여러 통이 와도 알림줄에는
+ * 마지막 하나만 남게 한다.
+ */
+export async function sendChatPush(
+  recipientProfileId: number,
+  message: { title: string; body: string; conversationId: string },
+): Promise<void> {
+  if (!isPushConfigured()) return
+
+  const devices = await query<DeviceRow>(
+    `SELECT id, push_token FROM device
+      WHERE revoked_at IS NULL AND profile_id = $1`,
+    [recipientProfileId],
+  )
+
+  for (const device of devices) {
+    const outcome = await sendToToken(device.push_token, {
+      title: message.title,
+      body: message.body.slice(0, 200),
+      route: `/?chat=${message.conversationId}`,
+      type: 'chat',
+      collapseKey: `chat-${message.conversationId}`,
+    })
+    if (!outcome.ok && outcome.unregistered) {
+      await db.query(`UPDATE device SET revoked_at = now() WHERE id = $1`, [device.id])
+    }
+  }
+}
+
 /** 아직 못 보낸 알림을 다시 시도한다. 자격증명을 나중에 넣었을 때 쓴다. */
 export async function retryPending(): Promise<DeliveryResult[]> {
   const pending = await query<{ notice_id: string }>(

@@ -1,5 +1,5 @@
 import 'server-only'
-import { query, queryOne } from '@/lib/db'
+import { db, query, queryOne } from '@/lib/db'
 
 // 화면이 읽는 유일한 데이터 원천. 여기서 Plex 를 호출하는 일은 없다 —
 // sync 워커가 미리 채워둔 DB 와 로컬 이미지 파일만 본다.
@@ -384,6 +384,71 @@ export async function getHomeRows(): Promise<LibraryRow[]> {
   return [{ key: 'recent', title: '최근 추가', items: recent.map(toItem) }, ...sectionRows].filter(
     (row) => row.items.length > 0,
   )
+}
+
+// --- 연재 중인 시리즈 (관리자가 고른다) --------------------------------------
+//
+// Plex 는 "지금 연재 중인가" 를 모른다. media_item 에 컬럼을 붙이면 sync 가 덮어쓰므로
+// featured_series 에 따로 담는다(database/0005_featured_series.sql).
+
+/** 홈 최상단 줄. 관리자가 켠 시리즈만, 정한 순서대로. */
+export async function getFeaturedSeries(): Promise<LibraryItem[]> {
+  const rows = await query<ItemRow>(
+    `${ITEM_SELECT}
+      JOIN featured_series f ON f.rating_key = m.rating_key
+     WHERE m.deleted_at IS NULL
+     ORDER BY f.sort_order, f.created_at DESC`,
+  )
+  return rows.map(toItem)
+}
+
+export interface AdminShow {
+  ratingKey: string
+  title: string
+  year: number | null
+  poster: string | null
+  sectionTitle: string
+  featured: boolean
+}
+
+/** 관리자 화면 — 시리즈 전체에 연재 여부를 얹는다. 켠 것이 위로 온다. */
+export async function listShowsForAdmin(): Promise<AdminShow[]> {
+  const rows = await query<{
+    rating_key: string
+    title: string
+    year: number | null
+    poster_file: string | null
+    section_title: string
+    featured: boolean
+  }>(
+    `SELECT m.rating_key, m.title, m.year, m.poster_file, s.title AS section_title,
+            (f.rating_key IS NOT NULL) AS featured
+       FROM media_item m
+       JOIN library_section s ON s.id = m.section_id
+       LEFT JOIN featured_series f ON f.rating_key = m.rating_key
+      WHERE m.deleted_at IS NULL AND m.type = 'show'
+      ORDER BY (f.rating_key IS NOT NULL) DESC, f.sort_order,
+               coalesce(m.title_sort, m.title)`,
+  )
+  return rows.map((row) => ({
+    ratingKey: row.rating_key,
+    title: row.title,
+    year: row.year,
+    poster: mediaUrl(row.poster_file),
+    sectionTitle: row.section_title,
+    featured: row.featured,
+  }))
+}
+
+/** 연재 표시를 켜고 끈다. */
+export async function setFeatured(ratingKey: string, featured: boolean): Promise<void> {
+  if (featured) {
+    await db.query(`INSERT INTO featured_series (rating_key) VALUES ($1) ON CONFLICT DO NOTHING`, [
+      ratingKey,
+    ])
+    return
+  }
+  await db.query(`DELETE FROM featured_series WHERE rating_key = $1`, [ratingKey])
 }
 
 export type SortKey = 'added' | 'title' | 'year' | 'rating'
