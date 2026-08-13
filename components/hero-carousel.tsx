@@ -100,7 +100,10 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
       <div className="absolute inset-0 bg-gradient-to-r from-background via-background/70 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
 
-      <div className="relative flex h-full items-end pb-28 md:items-center md:pb-0">
+      {/* 좁은 화면에서는 본문이 아래에 붙는다. 아래 여백을 키우면 덩어리가 통째로
+          위로 올라가 상단 바에 닿는다 — 화살표 줄이 생기며 덩어리가 커져서
+          여백을 pb-28 에서 줄였다. */}
+      <div className="relative flex h-full items-end pb-20 md:items-center md:pb-0">
         <div className="max-w-2xl px-4 md:px-8 lg:px-16">
           <motion.div
             key={item.ratingKey}
@@ -157,7 +160,7 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
           {/* 점은 본문 흐름 안에 둔다. 히어로 하단에 절대배치하면 홈에서 아래 줄을
               -mt 로 끌어올릴 때 "최근 추가" 제목과 겹친다(데스크탑 · 모바일 모두). */}
           {items.length > 1 ? (
-            <div className="mt-6 flex items-center">
+            <div className="mt-5 flex items-center">
               <ArrowButton label="이전 작품" onClick={() => go(index - 1)}>
                 <ChevronLeft className="h-5 w-5" />
               </ArrowButton>
@@ -171,7 +174,7 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
                     onClick={() => go(i)}
                     aria-label={`${i + 1}번째 작품 · ${entry.title}`}
                     aria-current={i === index}
-                    className="group flex h-10 items-center px-1"
+                    className="group flex h-9 items-center px-1"
                   >
                     <span
                       className={cn(
@@ -212,7 +215,7 @@ function ArrowButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/60 text-foreground backdrop-blur-sm transition hover:bg-secondary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/60 text-foreground backdrop-blur-sm transition hover:bg-secondary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       {children}
     </button>
