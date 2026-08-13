@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { ChevronDown, Home, Layers, LogOut, Search, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LibrarySection } from '@/lib/library'
+import type { Profile } from '@/lib/profiles'
 import { ChatPanel } from './chat-panel'
 import { NoticeBell } from './notice-bell'
 
@@ -14,17 +15,22 @@ import { NoticeBell } from './notice-bell'
 
 export function Navbar({
   groups,
+  profile,
   showAdminLink = false,
 }: {
   groups: { group: string; sections: LibrarySection[] }[]
+  /** 지금 보고 있는 사람. 우측 상단 동그란 버튼이 된다 */
+  profile: Profile | null
   /** Plex 서버 소유 계정으로 들어왔을 때만 관리자 진입점을 보여준다 */
   showAdminLink?: boolean
 }) {
   const pathname = usePathname()
   const [scrolled, setScrolled] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
   const navRef = useRef<HTMLDivElement>(null)
   const mobileNavRef = useRef<HTMLDivElement>(null)
+  const profileRef = useRef<HTMLDivElement>(null)
   const openSections = groups.find((group) => group.group === openGroup)?.sections ?? []
 
   useEffect(() => {
@@ -35,15 +41,22 @@ export function Navbar({
   }, [])
 
   // 바깥을 누르거나 화면이 바뀌면 열린 메뉴를 닫는다.
-  useEffect(() => setOpenGroup(null), [pathname])
+  useEffect(() => {
+    setOpenGroup(null)
+    setProfileOpen(false)
+  }, [pathname])
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node
-      if (navRef.current?.contains(target) || mobileNavRef.current?.contains(target)) return
-      setOpenGroup(null)
+      if (!navRef.current?.contains(target) && !mobileNavRef.current?.contains(target)) {
+        setOpenGroup(null)
+      }
+      if (!profileRef.current?.contains(target)) setProfileOpen(false)
     }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenGroup(null)
+      if (event.key !== 'Escape') return
+      setOpenGroup(null)
+      setProfileOpen(false)
     }
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('keydown', onKey)
@@ -53,10 +66,12 @@ export function Navbar({
     }
   }, [])
 
-  async function logout() {
+  // 나가면 프로필 고르는 화면으로 돌아간다. 프로필 쿠키가 곧 관문이라
+  // 다시 들어오려면 그 사람의 이메일을 한 번 더 확인하게 된다.
+  async function leave() {
     await fetch('/api/auth/logout', { method: 'POST' })
     // 쿠키를 지웠으니 전체 페이지 이동으로 서버가 다시 판단하게 한다.
-    window.location.assign('/login')
+    window.location.assign('/profile')
   }
 
   return (
@@ -166,15 +181,45 @@ export function Navbar({
               <ShieldCheck className="h-5 w-5" />
             </Link>
           ) : null}
-          <button
-            type="button"
-            onClick={logout}
-            aria-label="나가기"
-            title="나가기"
-            className="flex items-center justify-center rounded-full border border-border bg-secondary/60 p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
+          {/* 프로필 사진이 곧 메뉴 버튼이다. 지금은 "나가기" 하나뿐 */}
+          <div ref={profileRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setProfileOpen((open) => !open)}
+              aria-label={profile ? `${profile.name} 메뉴` : '프로필 메뉴'}
+              aria-expanded={profileOpen}
+              className={cn(
+                'flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-bold text-muted-foreground transition',
+                'ring-1 ring-inset ring-white/10 hover:ring-2 hover:ring-primary',
+                profileOpen && 'ring-2 ring-primary',
+              )}
+            >
+              {profile?.avatar ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={profile.avatar} alt="" className="h-full w-full object-cover" />
+              ) : (
+                (profile?.name.slice(0, 1) ?? '?')
+              )}
+            </button>
+
+            {profileOpen ? (
+              <div className="absolute right-0 top-full mt-2 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-2xl">
+                {profile ? (
+                  <p className="truncate px-4 py-2 text-sm font-semibold text-foreground">
+                    {profile.name}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={leave}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                >
+                  <LogOut className="h-4 w-4" />
+                  나가기
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 

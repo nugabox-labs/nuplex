@@ -20,7 +20,11 @@ export default async function BrowseLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar groups={groupSections(sections)} showAdminLink={profile?.isPlexAdmin ?? false} />
+      <Navbar
+        groups={groupSections(sections)}
+        profile={profile}
+        showAdminLink={profile?.isPlexAdmin ?? false}
+      />
       <main>{children}</main>
 
       {/* 동기화 시각은 보는 사람에게 쓸모가 없어 관리자 화면으로 옮겼다(AdminNav). */}

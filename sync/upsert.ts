@@ -1,4 +1,4 @@
-import { db, queryOne } from '@/lib/db'
+import { db, query, queryOne } from '@/lib/db'
 import type { PlexEnv, PlexUser } from '@/lib/plex/client'
 import { createLimiter, saveImage, type ImageKind } from './images'
 
@@ -455,6 +455,56 @@ export async function upsertPlexUsers(
   )
 
   return users.length
+}
+
+/**
+ * 시청 기록을 담는다. 홈의 "이어서 보기" 가 이걸 읽는다.
+ *
+ * 두 가지를 걸러낸다.
+ *  · 서버 소유자는 Plex 가 로컬 계정 id(1)로 남긴다. plex_account 에는 plex.tv id
+ *    (실측: 24766776)로 들어 있어 그대로 넣으면 외래키에 걸린다 — is_admin 계정으로 바꾼다.
+ *  · plex_account 에 없는 계정(탈퇴한 친구 등)의 기록은 버린다. 보여줄 프로필이 없다.
+ *
+ * 같은 기록이 다시 와도 historyKey 가 같으니 조용히 지나간다.
+ */
+export async function upsertWatchHistory(entries: any[]): Promise<number> {
+  if (entries.length === 0) return 0
+
+  const owner = await queryOne<{ id: string }>(
+    `SELECT id FROM plex_account WHERE is_admin = true ORDER BY id LIMIT 1`,
+  )
+  const known = new Set(
+    (
+      await query<{ id: string }>(`SELECT id FROM plex_account`)
+    ).map((row) => row.id),
+  )
+
+  let saved = 0
+  for (const entry of entries) {
+    const historyKey = num(String(entry.historyKey ?? '').split('/').pop())
+    const viewedAt = ts(entry.viewedAt)
+    const accountId =
+      Number(entry.accountID) === 1 ? (owner?.id ?? null) : String(entry.accountID ?? '')
+    if (historyKey === null || viewedAt === null || !accountId || !known.has(accountId)) continue
+
+    const result = await db.query(
+      `INSERT INTO watch_history (
+         history_key, plex_account_id, rating_key, type, show_rating_key, viewed_at
+       ) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (history_key) DO NOTHING`,
+      [
+        historyKey,
+        accountId,
+        String(entry.ratingKey),
+        String(entry.type),
+        // grandparentKey 는 "/library/metadata/6816" 형태다. ratingKey 만 떼어 쓴다.
+        entry.type === 'episode' ? (text(entry.grandparentKey)?.split('/').pop() ?? null) : null,
+        viewedAt,
+      ],
+    )
+    saved += result.rowCount ?? 0
+  }
+  return saved
 }
 
 /** 동기화 커서 — 중간에 죽어도 다음 실행이 여기서부터 이어받는다. */

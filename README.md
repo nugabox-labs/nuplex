@@ -23,8 +23,8 @@ cp .env.example .env          # 값을 채운다 (아래 표 참고)
 | 키 | 얻는 곳 |
 |---|---|
 | `PLEX_TOKEN` | Plex 웹 → 아무 항목 ⋯ → Get Info → View XML → 주소창의 `X-Plex-Token` |
-| `APP_PASSWORD_HASH` | `npm run hash-password -- '<비밀번호>'` 출력 한 줄 |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
+| `ADMIN_PASSWORD` | 아무 값. 단 `$` 를 넣지 말 것 |
 | `POSTGRES_PASSWORD` | 아무 값. 단 `$` 를 넣지 말 것(compose 가 변수로 해석한다) |
 
 Plex 쪽에서 사람이 해줘야 하는 설정은 [docs/PLEX-SETUP.md](docs/PLEX-SETUP.md).

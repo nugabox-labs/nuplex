@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
-import { LoginForm } from '@/components/login-form'
+import { AdminLoginForm } from '@/components/admin-login-form'
 
 export const metadata: Metadata = { title: '관리자 로그인' }
 
@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
           알림을 보내려면 관리자 비밀번호가 필요합니다.
         </p>
         <Suspense>
-          <LoginForm endpoint="/api/admin/login" defaultNext="/admin/notices" username="root" />
+          <AdminLoginForm />
         </Suspense>
       </div>
     </main>

@@ -146,12 +146,13 @@ const m = ua.match(/NuplexApp \((ios|android); bridge\/(\d+)\)/)
 
 셸을 만들 때 전제하는 `nuplex` 웹의 현재 동작이다.
 
-- **인증은 서명 쿠키다.** `nuplex_session`(30일) · `nuplex_profile`(1년), `httpOnly`,
-  `sameSite=lax`, 운영에서 `secure`. 셸은 토큰을 따로 보관하지 않고 웹뷰 쿠키
-  저장소를 그대로 쓴다.
-- **전 경로가 인증 게이트 뒤에 있다.** 미인증이면 `/login`, 프로필 미선택이면
-  `/profile` 로 리다이렉트된다. 셸이 푸시 라우트로 진입해도 이 리다이렉트를 거칠 수
-  있으므로, 로그인 후 원래 목적지로 돌아가는 `?next=` 처리에 의존한다.
+- **인증은 서명 쿠키다.** `nuplex_profile`(1년) · 관리자만 `nuplex_admin`(12시간),
+  `httpOnly`, `sameSite=lax`, 운영에서 `secure`. 열람용 공통 비밀번호는 없다 —
+  관문은 프로필 하나다. 셸은 토큰을 따로 보관하지 않고 웹뷰 쿠키 저장소를 그대로 쓴다.
+- **전 경로가 인증 게이트 뒤에 있다.** 프로필 쿠키가 없으면 입장 화면 `/welcome`
+  (거기서 `/profile` 로 이어짐)로 리다이렉트된다. 셸이 푸시 라우트로 진입해도 이
+  리다이렉트를 거칠 수 있으므로, 입장 후 원래 목적지로 돌아가는 `?next=` 처리에
+  의존한다.
 - **작품 상세 경로는 `/title/<ratingKey>`** 이다.
 - **Plex 딥링크 포맷은 웹이 이미 만들고 있다** (`lib/plex/client.ts`):
   `https://app.plex.tv/desktop/#!/server/<machineIdentifier>/details?key=<urlencoded /library/metadata/ratingKey>`
