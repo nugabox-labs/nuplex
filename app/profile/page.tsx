@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { ProfilePicker } from '@/components/profile-picker'
 import { listEnabledProfiles } from '@/lib/profiles'
@@ -23,7 +24,10 @@ export default async function ProfilePage() {
           아직 사용할 수 있는 프로필이 없습니다. 관리자에게 문의해 주세요.
         </p>
       ) : (
-        <ProfilePicker profiles={profiles} />
+        // 고른 뒤 어디로 갈지(`?next=`)를 읽는다 — useSearchParams 는 경계가 필요하다.
+        <Suspense>
+          <ProfilePicker profiles={profiles} />
+        </Suspense>
       )}
     </main>
   )

@@ -99,6 +99,19 @@ export type SendResult =
   | { ok: false; error: string; unregistered: boolean }
 
 /**
+ * Android 알림 채널을 골라 준다. 앱의 채널 표(nuplex-app/docs/PUSH_PAYLOAD.md)와 맞춘다.
+ *
+ * 채널을 지정하지 않으면 앱이 백그라운드일 때 시스템이 매니페스트 기본 채널(general)로
+ * 알림을 그린다. 그러면 사용자가 "채팅 알림만 끄기" 를 해도 백그라운드에서는 계속 온다 —
+ * 포그라운드와 백그라운드가 다른 채널을 쓰는 셈이라 설정이 거짓말이 된다.
+ */
+const ANDROID_CHANNELS = new Set(['chat', 'new_item', 'available'])
+
+function androidChannel(type: string): string {
+  return ANDROID_CHANNELS.has(type) ? type : 'general'
+}
+
+/**
  * 다시 시도해도 소용없는 토큰인가.
  *
  *   404 UNREGISTERED   앱을 지웠거나 토큰이 만료됨
@@ -146,6 +159,7 @@ export async function sendToToken(token: string, message: PushMessage): Promise<
             },
             android: {
               priority: 'HIGH',
+              notification: { channel_id: androidChannel(message.type ?? 'notice') },
               ...(message.collapseKey ? { collapse_key: message.collapseKey } : {}),
             },
             apns: {

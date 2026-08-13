@@ -69,7 +69,7 @@ export async function proxy(request: NextRequest) {
     // 프로필을 아직 안 골랐으면 고르는 화면으로 보낸다.
     const profileId = await readProfileValue(request.cookies.get(PROFILE_COOKIE)?.value)
     if (!profileId && !matches(pathname, PROFILE_PATHS)) {
-      return NextResponse.redirect(new URL('/profile', request.url))
+      return NextResponse.redirect(withNext(new URL('/profile', request.url), request))
     }
     // 이미 골랐는데 선택 화면으로 오면 홈으로 돌려보낸다.
     if (profileId && pathname === '/profile') {
@@ -78,12 +78,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const loginUrl = new URL('/login', request.url)
-  // 로그인 후 원래 보려던 곳으로 돌아간다. 외부 사이트로 튕기지 않도록 경로만 넘긴다.
-  if (pathname !== '/') {
-    loginUrl.searchParams.set('next', pathname + request.nextUrl.search)
-  }
-  return NextResponse.redirect(loginUrl)
+  return NextResponse.redirect(withNext(new URL('/login', request.url), request))
+}
+
+/**
+ * 원래 보려던 곳을 `next` 로 달아 준다. 외부 사이트로 튕기지 않도록 경로만 넘긴다.
+ *
+ * **쿼리를 함께 실어야 한다.** 채팅 푸시의 라우트는 `/?chat=12` 라 경로만 보면 `/` 다 —
+ * 경로만으로 판단하면 쿼리가 통째로 버려져, 알림을 탭한 사람이 로그인 뒤 홈으로 간다
+ * (docs/CHAT.md §5).
+ */
+function withNext(destination: URL, request: NextRequest): URL {
+  const target = request.nextUrl.pathname + request.nextUrl.search
+  if (target !== '/') destination.searchParams.set('next', target)
+  return destination
 }
 
 export const config = {
