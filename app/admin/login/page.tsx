@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
           알림을 보내려면 관리자 비밀번호가 필요합니다.
         </p>
         <Suspense>
-          <LoginForm endpoint="/api/admin/login" defaultNext="/admin/notices" />
+          <LoginForm endpoint="/api/admin/login" defaultNext="/admin/notices" username="root" />
         </Suspense>
       </div>
     </main>

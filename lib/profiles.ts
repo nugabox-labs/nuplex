@@ -14,6 +14,8 @@ export interface Profile {
   hasEmail: boolean
   /** 힌트로 보여줄 가린 이메일. 본인은 알아보되 남에게는 단서가 안 되게 한다 */
   maskedEmail: string | null
+  /** Plex 서버 소유 계정인가. 관리자 화면 진입점을 이 사람에게만 보여준다 */
+  isPlexAdmin: boolean
 }
 
 /** 관리자 화면에서만 쓰는, 이메일까지 보이는 형태. */
@@ -55,6 +57,16 @@ const PROFILE_SELECT = `
     LEFT JOIN plex_account a ON a.id = p.plex_account_id AND a.deleted_at IS NULL
 `
 
+/**
+ * 표시 이름을 SQL 로 고를 때 쓰는 조각. 아래 displayName() 과 같은 규칙이고,
+ * 프로필을 조인해 오는 다른 모듈(lib/chat.ts)이 규칙을 다시 쓰지 않도록 내보낸다.
+ * `profile p` · `plex_account a` 별칭을 전제한다.
+ */
+export const PROFILE_NAME_SQL = `coalesce(
+  nullif(btrim(p.display_name), ''), nullif(btrim(a.name), ''),
+  nullif(btrim(a.username), ''), '이름 없음'
+)`
+
 function displayName(row: ProfileRow): string {
   return row.display_name?.trim() || row.plex_name?.trim() || row.username?.trim() || '이름 없음'
 }
@@ -83,6 +95,7 @@ function toProfile(row: ProfileRow): Profile {
     avatar: row.avatar_file ? `/media/${row.avatar_file}` : null,
     hasEmail: effectiveEmail(row) !== null,
     maskedEmail: maskEmail(effectiveEmail(row)),
+    isPlexAdmin: Boolean(row.is_admin),
   }
 }
 
@@ -118,6 +131,15 @@ export async function verifyProfileEmail(id: number, email: string): Promise<boo
   const expected = effectiveEmail(row)
   if (!expected) return false
   return expected.toLowerCase() === email.trim().toLowerCase()
+}
+
+/**
+ * 쿠키에 담긴 지금 프로필. 선택 화면과 달리 enabled 를 따지지 않는다 —
+ * 관리자가 잠깐 껐다고 이미 들어와 있는 사람의 화면이 깨지면 곤란하다.
+ */
+export async function getCurrentProfile(id: number): Promise<Profile | null> {
+  const row = await queryOne<ProfileRow>(`${PROFILE_SELECT} WHERE p.id = $1`, [id])
+  return row ? toProfile(row) : null
 }
 
 // --- 관리자 -----------------------------------------------------------------

@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, Home, Layers, LogOut, Search } from 'lucide-react'
+import { ChevronDown, Home, Layers, LogOut, Search, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LibrarySection } from '@/lib/library'
+import { ChatPanel } from './chat-panel'
 import { NoticeBell } from './notice-bell'
 import { SectionTitle } from './section-title'
 
@@ -14,8 +15,11 @@ import { SectionTitle } from './section-title'
 
 export function Navbar({
   groups,
+  showAdminLink = false,
 }: {
   groups: { group: string; sections: LibrarySection[] }[]
+  /** Plex 서버 소유 계정으로 들어왔을 때만 관리자 진입점을 보여준다 */
+  showAdminLink?: boolean
 }) {
   const pathname = usePathname()
   const [scrolled, setScrolled] = useState(false)
@@ -147,7 +151,18 @@ export function Navbar({
           >
             <Search className="h-5 w-5" />
           </Link>
+          <ChatPanel />
           <NoticeBell />
+          {showAdminLink ? (
+            <Link
+              href="/admin/notices"
+              aria-label="관리자"
+              title="관리자"
+              className="flex items-center justify-center rounded-full border border-primary/40 bg-primary/10 p-2 text-primary transition hover:bg-primary/20"
+            >
+              <ShieldCheck className="h-5 w-5" />
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={logout}
