@@ -1,10 +1,17 @@
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
+import { Download } from 'lucide-react'
 import { LoginForm } from '@/components/login-form'
 
 export const metadata: Metadata = {
   title: 'NUPLEX 로그인',
 }
+
+// 앱 내려받기 — NUPLEX 앱이 나오기 전까지는 재생을 맡고 있는 Plex 앱으로 보낸다.
+// 출시되면 이 주소 두 개와 바로 아래 안내 문구만 바꾸면 된다. 버튼 문구는
+// 앱 이름을 담지 않아 그대로 둔다.
+const APP_STORE_URL = 'https://apps.apple.com/app/plex/id383457673'
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.plexapp.android'
 
 export default function LoginPage() {
   return (
@@ -31,7 +38,30 @@ export default function LoginPage() {
         >
           NUPLEX 채널 문의
         </a>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <StoreLink href={APP_STORE_URL} store="App Store" />
+          <StoreLink href={PLAY_STORE_URL} store="Google Play" />
+        </div>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          지금은 재생을 맡고 있는 Plex 앱으로 연결됩니다 · NUPLEX 앱은 준비 중입니다
+        </p>
       </div>
     </main>
+  )
+}
+
+function StoreLink({ href, store }: { href: string; store: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${store}에서 앱 내려받기`}
+      className="flex items-center justify-center gap-2 rounded-md border border-border bg-secondary/60 px-3 py-2.5 text-sm font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      <Download className="h-4 w-4 shrink-0" />
+      {store}
+    </a>
   )
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { ExternalLink, Star } from 'lucide-react'
+import { Play, Star } from 'lucide-react'
 import { ContentRow } from '@/components/content-row'
 import { SeasonList } from '@/components/season-list'
 import {
@@ -125,8 +125,8 @@ export default async function TitlePage({
               rel="noopener noreferrer"
               className="mt-6 inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <ExternalLink className="h-5 w-5" />
-              Plex에서 보기
+              <Play className="h-5 w-5 fill-current" />
+              Plex에서 시청하기
             </a>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
+import { getLastSync } from '@/lib/library'
+import { formatRelativeTime } from '@/lib/format'
 
 const TABS = [
   { key: 'notices', href: '/admin/notices', label: '알림' },
@@ -7,9 +9,12 @@ const TABS = [
   { key: 'profiles', href: '/admin/profiles', label: '프로필' },
 ]
 
-export function AdminNav({ current }: { current: string }) {
+export async function AdminNav({ current }: { current: string }) {
+  // 동기화 시각은 관리자만 볼 자리다. DB 가 아직 없어도 화면은 떠야 한다.
+  const lastSync = await getLastSync().catch(() => null)
+
   return (
-    <div className="mb-8 flex items-center justify-between gap-4">
+    <div className="mb-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       <nav className="flex items-center gap-1">
         {TABS.map((tab) => (
           <Link
@@ -26,9 +31,18 @@ export function AdminNav({ current }: { current: string }) {
           </Link>
         ))}
       </nav>
-      <Link href="/" className="text-sm text-muted-foreground transition hover:text-foreground">
-        사이트로 →
-      </Link>
+      <div className="flex items-center gap-4">
+        <span className="text-xs text-muted-foreground">
+          {lastSync
+            ? `마지막 동기화 ${formatRelativeTime(lastSync.finishedAt)}${
+                lastSync.status === 'failed' ? ' · 실패' : ''
+              }`
+            : '아직 동기화된 적이 없습니다.'}
+        </span>
+        <Link href="/" className="text-sm text-muted-foreground transition hover:text-foreground">
+          사이트로 →
+        </Link>
+      </div>
     </div>
   )
 }

@@ -1,33 +1,58 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
-import { ExternalLink, Info, Star } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Info, Play, Star } from 'lucide-react'
 import type { LibraryItem } from '@/lib/library'
 import { formatLength, formatRating, metaLine, typeLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 // 최근 추가된 작품을 배경째로 넘겨 보여준다.
-// 자동으로 넘어가되, 사람이 점을 눌러 고르면 그때부터 멈춘다 — 읽는 중에 화면이
+// 자동으로 넘어가되, 사람이 직접 넘기면 그때부터 멈춘다 — 읽는 중에 화면이
 // 바뀌어버리는 게 가장 거슬리기 때문이다.
+// 넘기는 방법은 세 가지: 화살표 · 점 · 좌우로 밀기.
 
 const INTERVAL_MS = 7000
+/** 이만큼은 가로로 밀어야 넘긴다. 세로로 스크롤하다 스친 것과 구분하는 값 */
+const SWIPE_PX = 60
 
 export function HeroCarousel({ items }: { items: LibraryItem[] }) {
   const [index, setIndex] = useState(0)
   const [paused, setPaused] = useState(false)
+  /** 사람이 한 번이라도 직접 넘겼는지. 마우스가 떠나도 다시 돌지 않게 하는 빗장 */
+  const [chosen, setChosen] = useState(false)
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
 
   const go = useCallback(
-    (next: number) => setIndex(((next % items.length) + items.length) % items.length),
+    (next: number) => {
+      setIndex(((next % items.length) + items.length) % items.length)
+      setChosen(true)
+    },
     [items.length],
   )
 
+  // 손가락 · 마우스로 밀어서 넘기기. 버튼 · 링크 위에서 시작한 동작은 건드리지 않는다.
+  function onPointerDown(event: React.PointerEvent) {
+    const onControl = (event.target as HTMLElement).closest('a, button')
+    swipeStart.current = onControl ? null : { x: event.clientX, y: event.clientY }
+  }
+
+  function onPointerUp(event: React.PointerEvent) {
+    const start = swipeStart.current
+    swipeStart.current = null
+    if (!start) return
+    const dx = event.clientX - start.x
+    const dy = event.clientY - start.y
+    if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < Math.abs(dy)) return
+    go(index + (dx < 0 ? 1 : -1))
+  }
+
   useEffect(() => {
-    if (paused || items.length < 2) return
+    if (paused || chosen || items.length < 2) return
     const timer = setInterval(() => setIndex((i) => (i + 1) % items.length), INTERVAL_MS)
     return () => clearInterval(timer)
-  }, [paused, items.length])
+  }, [paused, chosen, items.length])
 
   // 배경 이미지는 미리 받아둔 로컬 파일이라 다음 장을 먼저 깔아둬도 부담이 없다.
   useEffect(() => {
@@ -46,6 +71,11 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
       className="relative h-[80vh] min-h-[520px] w-full overflow-hidden"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => {
+        swipeStart.current = null
+      }}
       aria-roledescription="carousel"
       aria-label="최근 추가된 작품"
     >
@@ -111,8 +141,8 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <ExternalLink className="h-5 w-5" />
-                Plex에서 보기
+                <Play className="h-5 w-5 fill-current" />
+                Plex에서 시청하기
               </a>
               <Link
                 href={`/title/${item.ratingKey}`}
@@ -127,30 +157,64 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
           {/* 점은 본문 흐름 안에 둔다. 히어로 하단에 절대배치하면 홈에서 아래 줄을
               -mt 로 끌어올릴 때 "최근 추가" 제목과 겹친다(데스크탑 · 모바일 모두). */}
           {items.length > 1 ? (
-            <div className="mt-8 flex items-center gap-2">
-              {items.map((entry, i) => (
-                <button
-                  key={entry.ratingKey}
-                  type="button"
-                  onClick={() => {
-                    go(i)
-                    setPaused(true)
-                  }}
-                  aria-label={`${i + 1}번째 작품 · ${entry.title}`}
-                  aria-current={i === index}
-                  className={cn(
-                    'h-1.5 rounded-full transition-all',
-                    i === index
-                      ? 'w-8 bg-primary'
-                      : 'w-1.5 bg-foreground/30 hover:bg-foreground/60',
-                  )}
-                />
-              ))}
+            <div className="mt-6 flex items-center">
+              <ArrowButton label="이전 작품" onClick={() => go(index - 1)}>
+                <ChevronLeft className="h-5 w-5" />
+              </ArrowButton>
+
+              {/* 점은 얇게 보이되 누르는 자리는 손가락 크기로 넓혀둔다 */}
+              <div className="mx-2 flex items-center">
+                {items.map((entry, i) => (
+                  <button
+                    key={entry.ratingKey}
+                    type="button"
+                    onClick={() => go(i)}
+                    aria-label={`${i + 1}번째 작품 · ${entry.title}`}
+                    aria-current={i === index}
+                    className="group flex h-10 items-center px-1"
+                  >
+                    <span
+                      className={cn(
+                        'h-1.5 rounded-full transition-all',
+                        i === index
+                          ? 'w-8 bg-primary'
+                          : 'w-1.5 bg-foreground/30 group-hover:bg-foreground/60',
+                      )}
+                    />
+                  </button>
+                ))}
+              </div>
+
+              <ArrowButton label="다음 작품" onClick={() => go(index + 1)}>
+                <ChevronRight className="h-5 w-5" />
+              </ArrowButton>
             </div>
           ) : null}
         </div>
       </div>
 
     </section>
+  )
+}
+
+function ArrowButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/60 text-foreground backdrop-blur-sm transition hover:bg-secondary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {children}
+    </button>
   )
 }

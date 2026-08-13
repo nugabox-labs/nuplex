@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils'
 import type { LibrarySection } from '@/lib/library'
 import { ChatPanel } from './chat-panel'
 import { NoticeBell } from './notice-bell'
-import { SectionTitle } from './section-title'
 
 // 메뉴 구성은 Plex 의 라이브러리 분류를 그대로 따른다. 우리가 새로 묶지 않는다.
 // 순서: 홈 · 검색 → 구분선 → 영화 ▾ · 드라마 ▾ · 애니 ▾ · 예능 · 다큐
@@ -25,6 +24,8 @@ export function Navbar({
   const [scrolled, setScrolled] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const navRef = useRef<HTMLDivElement>(null)
+  const mobileNavRef = useRef<HTMLDivElement>(null)
+  const openSections = groups.find((group) => group.group === openGroup)?.sections ?? []
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24)
@@ -37,7 +38,9 @@ export function Navbar({
   useEffect(() => setOpenGroup(null), [pathname])
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (!navRef.current?.contains(event.target as Node)) setOpenGroup(null)
+      const target = event.target as Node
+      if (navRef.current?.contains(target) || mobileNavRef.current?.contains(target)) return
+      setOpenGroup(null)
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpenGroup(null)
@@ -175,27 +178,76 @@ export function Navbar({
         </div>
       </div>
 
-      {/* 좁은 화면 — 분류를 가로 스크롤로 편다 */}
-      <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pb-2 lg:hidden">
-        <NavLink href="/" active={pathname === '/'} icon={Home} label="홈" />
-        <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-        {groups.flatMap((group) =>
-          group.sections.map((section) => (
-            <NavLink
-              key={section.id}
-              href={`/library/${section.id}`}
-              active={pathname === `/library/${section.id}`}
-              label={<SectionTitle title={section.title} />}
-            />
-          )),
-        )}
-        <NavLink
-          href="/collections"
-          active={pathname === '/collections'}
-          icon={Layers}
-          label="시리즈"
-        />
-      </nav>
+      {/* 좁은 화면 — 구분만 늘어놓고, 하위 분류는 눌러서 아래로 편다.
+          전부 펼쳐두면 줄이 화면 몇 배로 길어져 무엇이 있는지 한눈에 안 들어온다. */}
+      <div ref={mobileNavRef} className="lg:hidden">
+        <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pb-2">
+          <NavLink href="/" active={pathname === '/'} icon={Home} label="홈" />
+          <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+          {groups.map((group) =>
+            group.sections.length === 1 ? (
+              <NavLink
+                key={group.group}
+                href={`/library/${group.sections[0].id}`}
+                active={pathname === `/library/${group.sections[0].id}`}
+                label={group.group}
+              />
+            ) : (
+              <button
+                key={group.group}
+                type="button"
+                onClick={() =>
+                  setOpenGroup((current) => (current === group.group ? null : group.group))
+                }
+                aria-expanded={openGroup === group.group}
+                className={cn(
+                  'flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition',
+                  openGroup === group.group ||
+                    group.sections.some((s) => pathname === `/library/${s.id}`)
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {group.group}
+                <ChevronDown
+                  className={cn(
+                    'h-3.5 w-3.5 transition-transform',
+                    openGroup === group.group && 'rotate-180',
+                  )}
+                />
+              </button>
+            ),
+          )}
+          <NavLink
+            href="/collections"
+            active={pathname === '/collections'}
+            icon={Layers}
+            label="시리즈"
+          />
+        </nav>
+
+        {openSections.length > 1 ? (
+          <ul className="grid grid-cols-2 gap-1 border-t border-border bg-popover/95 px-4 py-2 shadow-2xl backdrop-blur-md">
+            {openSections.map((section) => (
+              <li key={section.id}>
+                <Link
+                  href={`/library/${section.id}`}
+                  onClick={() => setOpenGroup(null)}
+                  className={cn(
+                    'flex items-center justify-between gap-3 rounded-md px-3 py-2.5 text-sm transition',
+                    pathname === `/library/${section.id}`
+                      ? 'bg-primary/15 font-medium text-primary'
+                      : 'text-foreground hover:bg-secondary',
+                  )}
+                >
+                  {section.label}
+                  <span className="text-xs text-muted-foreground">{section.count}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </header>
   )
 }
