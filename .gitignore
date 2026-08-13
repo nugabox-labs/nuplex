@@ -12,7 +12,7 @@ tsconfig.tsbuildinfo
 .compose_state
 
 # 동기화 산출물 (포스터 · 배경 이미지) · 배포 기록
-data/
+/data
 .last_deploy_commit
 
 # OS
