@@ -24,7 +24,11 @@ export default async function BrowseLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar groups={groupSections(sections)} showAdminLink={profile?.isPlexAdmin ?? false} />
+      <Navbar
+        groups={groupSections(sections)}
+        profile={profile}
+        showAdminLink={profile?.isPlexAdmin ?? false}
+      />
       <main>{children}</main>
 
       <footer className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground md:px-8">

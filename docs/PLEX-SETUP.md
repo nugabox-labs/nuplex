@@ -50,6 +50,10 @@ https://app.plex.tv/desktop/#!/server/{machineIdentifier}/details?key=%2Flibrary
 
 ## 안 쓰는 것
 
-- **plex.tv PIN 로그인**: 사용자별 Plex 계정 로그인. 지금은 공통 비밀번호 하나라 필요 없다.
-  나중에 계정별 시청기록을 붙일 때 다시 검토한다.
+- **plex.tv PIN 로그인**: 사용자별 Plex 계정 로그인. 프로필을 고를 때 가입 이메일을
+  확인하는 것으로 갈음한다.
+- **사용자별 재생 위치(viewOffset)**: 관리자 토큰으로는 못 얻는다. `/library/onDeck` 은
+  `accountID` 를 조용히 무시하고 관리자 본인의 이어보기를 돌려주며(실측), 공유 친구의
+  토큰은 얻을 방법이 없다. 시청 **기록**은 `/status/sessions/history/all?accountID=` 로
+  전부 받을 수 있어서, 홈의 "이어서 보기" 는 다음 화 방식으로 만들었다.
 - **재생 · 트랜스코딩 API**: 재생은 Plex 로 넘긴다. 앱 안에서 재생하지 않는다.

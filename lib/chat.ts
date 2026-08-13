@@ -5,8 +5,8 @@ import { PROFILE_NAME_SQL } from '@/lib/profiles'
 
 // 채팅 — 프로필끼리 주고받는 1:1 대화(database/0006_chat.sql).
 //
-// 상대는 "켜져 있는 프로필" 이다. 권한은 걸지 않는다 — 관문은 여전히 공통 비밀번호
-// 하나이고, 프로필은 신원 표시일 뿐이다(AGENTS.md §2).
+// 상대는 "켜져 있는 프로필" 이다. 별도 권한은 걸지 않는다 — 관문은 프로필 하나이고
+// (첫 진입 때 가입 이메일 확인), 여기서는 신원 표시로만 쓴다(AGENTS.md §2).
 //
 // 새 메시지는 두 갈래로 알린다.
 //   · 웹  — Postgres NOTIFY → /api/chat/stream 의 SSE

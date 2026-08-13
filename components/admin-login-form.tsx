@@ -4,16 +4,16 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
-// 열람용 · 관리자용 로그인 화면이 같은 폼을 쓴다.
-// 다른 건 보낼 주소, 성공 후 갈 곳, 그리고 관리자에만 있는 아이디 칸뿐이다.
-export function LoginForm({
-  endpoint = '/api/auth/login',
-  defaultNext = '/',
-  username,
+// 관리자 로그인 폼. 비밀번호를 받는 화면은 이제 여기 하나뿐이다 —
+// 열람은 프로필 이메일이 관문이라 비밀번호를 쓰지 않는다.
+export function AdminLoginForm({
+  endpoint = '/api/admin/login',
+  defaultNext = '/admin/notices',
+  username = 'root',
 }: {
   endpoint?: string
   defaultNext?: string
-  /** 주면 고정된 아이디 칸을 보여주고 함께 보낸다(관리자 전용) */
+  /** 고정된 아이디 칸에 보여주고 함께 보낸다. 서버도 값을 다시 확인한다 */
   username?: string
 } = {}) {
   const searchParams = useSearchParams()

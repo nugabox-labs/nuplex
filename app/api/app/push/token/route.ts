@@ -3,7 +3,7 @@ import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
 import { registerDevice, revokeDevice } from '@/lib/devices'
 
 // 앱 셸의 푸시 토큰 등록/해제(설계문서 §6.4).
-// 열람 세션 뒤에 있다 — proxy 가 이미 막고 있으므로 로그인한 앱만 도달한다.
+// 프로필 관문 뒤에 있다 — proxy 가 이미 막고 있으므로 입장한 앱만 도달한다.
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {

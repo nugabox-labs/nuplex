@@ -300,6 +300,44 @@ export async function* iterateSectionItems(
   }
 }
 
+/**
+ * 시청 기록. 관리자 토큰 하나로 **모든 공유 사용자의 기록**이 한 번에 나온다
+ * (항목마다 accountID 가 붙어 있다).
+ *
+ * 여기서 재생 위치(viewOffset)는 못 얻는다. `/library/onDeck` 은 accountID 를 조용히
+ * 무시하고 관리자 본인의 이어보기를 돌려주며(실측), 남의 토큰은 공유 친구에게서
+ * 얻을 수 없다. 홈의 "이어서 보기" 를 다음 화 방식으로 만든 이유다.
+ *
+ * `viewedSince` 를 주면 그 시각 이후만 받는다. 필터 문법은 섹션 조회와 같다 —
+ * 비교 연산자가 파라미터 이름에 붙는다(실측: 전체 1,972건 → 필터 32건).
+ */
+export async function fetchWatchHistory(
+  env: PlexEnv,
+  viewedSince?: number,
+): Promise<any[]> {
+  const all: any[] = []
+  let offset = 0
+
+  while (true) {
+    const params: Record<string, string | number> = {
+      'X-Plex-Container-Start': offset,
+      'X-Plex-Container-Size': PAGE_SIZE,
+      sort: 'viewedAt:asc',
+    }
+    if (viewedSince) params['viewedAt>'] = viewedSince
+
+    const container = await plexGet(env, '/status/sessions/history/all', params)
+    const items: any[] = container?.Metadata ?? []
+    const totalSize: number = container?.totalSize ?? container?.size ?? items.length
+
+    if (items.length === 0) return all
+    all.push(...items)
+
+    offset += items.length
+    if (offset >= totalSize) return all
+  }
+}
+
 /** 섹션에 속한 컬렉션(사람이 Plex 에서 직접 묶은 시리즈 모음) 목록. */
 export async function fetchCollections(env: PlexEnv, sectionKey: string): Promise<any[]> {
   const container = await plexGet(env, `/library/sections/${sectionKey}/collections`)

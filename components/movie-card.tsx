@@ -5,6 +5,7 @@ import { motion } from 'motion/react'
 import { Star } from 'lucide-react'
 import type { LibraryItem } from '@/lib/library'
 import { formatRating, metaLine, typeLabel } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 export function MovieCard({ item }: { item: LibraryItem }) {
   const rating = formatRating(item)
@@ -45,8 +46,9 @@ export function MovieCard({ item }: { item: LibraryItem }) {
 
         <div className="space-y-0.5 p-3">
           <h3 className="truncate text-sm font-semibold text-foreground">{item.title}</h3>
-          <p className="truncate text-xs text-muted-foreground">
-            {metaLine(item.year, item.genres[0] ?? typeLabel(item.type))}
+          {/* "이어서 보기" 줄에서는 연도 · 장르 대신 어디부터 볼지를 보여준다 */}
+          <p className={cn('truncate text-xs', item.badge ? 'text-primary' : 'text-muted-foreground')}>
+            {item.badge ?? metaLine(item.year, item.genres[0] ?? typeLabel(item.type))}
           </p>
         </div>
       </Link>

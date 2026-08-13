@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import type { Profile } from '@/lib/profiles'
-import { cn } from '@/lib/utils'
+import { cn, safeNext } from '@/lib/utils'
 
 // 프로필을 고르고, 처음이면 그 사람의 가입 이메일을 한 번 확인한다.
 // 통과하면 1년짜리 쿠키에 담긴다 — 로그아웃하지 않는 한 다시 묻지 않는다.
@@ -30,9 +30,8 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
 
     if (res.ok) {
       // 원래 보려던 곳이 있으면 그리로 간다(채팅 푸시의 `/?chat=12` 등).
-      // 열린 곳이 외부 주소로 바뀌지 않도록 내부 경로만 받아들인다.
-      const next = searchParams.get('next')
-      const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/'
+      // safeNext 가 외부 주소 · 입장 흐름 · 없어진 옛 경로를 걸러낸다.
+      const target = safeNext(searchParams.get('next'))
       // 프로필 쿠키가 새로 생겼다. 전체 페이지 이동이라야 프록시가 이걸 보고
       // 통과시킨다 — 클라이언트 라우팅으로는 선택 화면으로 되돌아온다.
       // 셸이 이 이동을 신호로 푸시 토큰을 다시 등록한다(nuplex-app BRIDGE_CONTRACT §6).

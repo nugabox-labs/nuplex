@@ -8,6 +8,7 @@ import {
   fetchCollections,
   fetchPlexUsers,
   fetchSections,
+  fetchWatchHistory,
   iterateSectionItems,
   readPlexEnv,
 } from '@/lib/plex/client'
@@ -22,6 +23,7 @@ import {
   upsertPlexUsers,
   upsertSeason,
   upsertSection,
+  upsertWatchHistory,
   writeState,
   type ImageCounter,
 } from './upsert'
@@ -38,6 +40,8 @@ import {
 export type SyncKind = 'incremental' | 'full'
 
 const LAST_SUCCESS_KEY = 'last_success_at'
+// 시청 기록을 어디까지 받았는지. 처음에는 값이 없어 전체(수천 건)를 한 번 받는다.
+const HISTORY_KEY = 'history_viewed_until'
 // 전체 훑기가 "언제 시작됐는지". 중간에 끊겨 다음 실행이 이어받아도 이 값은 유지된다.
 const FULL_SWEEP_KEY = 'full_sweep_started_at'
 // 증분 조회에 겹침을 준다. Plex 의 updatedAt 과 우리 시계가 몇 초 어긋나도
@@ -53,6 +57,7 @@ export interface SyncResult {
   episodesUpserted: number
   collectionsUpserted: number
   usersUpserted: number
+  historyUpserted: number
   imagesSaved: number
   itemsDeleted: number
 }
@@ -75,6 +80,7 @@ export async function runSync(kind: SyncKind): Promise<SyncResult> {
     episodesUpserted: 0,
     collectionsUpserted: 0,
     usersUpserted: 0,
+    historyUpserted: 0,
     imagesSaved: 0,
     itemsDeleted: 0,
   }
@@ -120,6 +126,17 @@ export async function runSync(kind: SyncKind): Promise<SyncResult> {
       console.log(`[sync] Plex 사용자 ${result.usersUpserted}명`)
     } catch (error) {
       console.error('[sync] 사용자 목록을 받지 못했습니다:', error)
+    }
+
+    // 시청 기록. 계정 행이 있어야 넣을 수 있으니 사용자 다음이다.
+    // 여기서 실패해도 라이브러리 동기화까지 막을 이유는 없다 — 홈의 줄 하나가 잠깐 멈출 뿐이다.
+    try {
+      result.historyUpserted = await syncWatchHistory(env)
+      if (result.historyUpserted > 0) {
+        console.log(`[sync] 시청 기록 ${result.historyUpserted}건`)
+      }
+    } catch (error) {
+      console.error('[sync] 시청 기록을 받지 못했습니다:', error)
     }
 
     const sections = (await fetchSections(env)).filter(
@@ -232,6 +249,25 @@ async function syncSection(
 }
 
 /**
+ * 시청 기록을 받아 담는다. 마지막으로 받은 시각부터만 받되 겹침을 줘서,
+ * Plex 와 우리 시계가 몇 초 어긋나도 그 사이 기록을 놓치지 않는다.
+ */
+async function syncWatchHistory(env: ReturnType<typeof readPlexEnv>): Promise<number> {
+  const until = await readState(HISTORY_KEY)
+  const viewedSince = until ? Math.floor(new Date(until).getTime() / 1000) - OVERLAP_SECONDS : undefined
+
+  const entries = await fetchWatchHistory(env, viewedSince)
+  const saved = await upsertWatchHistory(entries)
+
+  // 받은 것 중 가장 나중 시각까지 왔다고 기록한다. 한 건도 없으면 커서를 그대로 둔다 —
+  // 지금 시각으로 밀면 그 사이에 늦게 들어온 기록을 영영 못 받는다.
+  const latest = entries.reduce((max, entry) => Math.max(max, Number(entry.viewedAt) || 0), 0)
+  if (latest > 0) await writeState(HISTORY_KEY, new Date(latest * 1000).toISOString())
+
+  return saved
+}
+
+/**
  * 시리즈 한 편의 시즌 · 에피소드를 통째로 다시 맞춘다.
  * 에피소드는 시즌마다 부르지 않고 allLeaves 로 한 번에 받는다 — 드라마가 많으면
  * 시즌 단위 호출은 호출 수가 곧바로 수천 건이 된다.
@@ -341,6 +377,7 @@ if (process.argv[1]?.endsWith('run.ts')) {
       console.log(
         `[sync] 완료 (${r.kind}) — 항목 ${r.itemsUpserted}건 · 에피소드 ${r.episodesUpserted}건 · ` +
           `컬렉션 ${r.collectionsUpserted}개 · 사용자 ${r.usersUpserted}명 · ` +
+          `시청 기록 ${r.historyUpserted}건 · ` +
           `이미지 ${r.imagesSaved}장 · 삭제 ${r.itemsDeleted}건`,
       )
       process.exit(0)

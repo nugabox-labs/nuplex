@@ -43,10 +43,10 @@ notice (id, title, body, published_at, created_at)
 
 ## 권한
 
-`ADMIN_PASSWORD_HASH` 는 열람용 `APP_PASSWORD_HASH` 와 **반드시 달라야 한다.**
-열람용은 지인에게 공유하는 값이라 그걸로 알림까지 보낼 수 있으면 안 된다.
+알림을 올리려면 관리자 비밀번호(`ADMIN_PASSWORD`)가 따로 필요하다. 열람은 프로필
+이메일만 확인하고 들어오는 자리라, 그걸로 알림까지 보낼 수 있으면 안 되기 때문이다.
 관리자 세션은 12시간짜리 별도 쿠키(`nuplex_admin`)이고, 서명 대상에 범위가 들어가 있어
-열람용 쿠키를 관리자 쿠키로 바꿔치기할 수 없다. 자세한 건 [SECURITY.md](SECURITY.md).
+프로필 쿠키를 관리자 쿠키로 바꿔치기할 수 없다. 자세한 건 [SECURITY.md](SECURITY.md).
 
 ## 초안 자동 생성
 

@@ -24,6 +24,8 @@ export interface LibraryItem {
   genres: string[]
   /** "Plex에서 보기" 딥링크. 서버에서 만들어 내려보낸다 — 클라이언트가 서버 id 를 알 필요가 없다. */
   plexUrl: string
+  /** 카드 아래에 한 줄 덧붙일 말. "이어서 보기" 줄에서만 채운다 */
+  badge?: string
 }
 
 export interface Credit {
@@ -384,6 +386,57 @@ export async function getHomeRows(): Promise<LibraryRow[]> {
   return [{ key: 'recent', title: '최근 추가', items: recent.map(toItem) }, ...sectionRows].filter(
     (row) => row.items.length > 0,
   )
+}
+
+// --- 이어서 보기 (프로필별) ---------------------------------------------------
+//
+// Plex 에서 남의 재생 위치(viewOffset)는 못 가져온다 — `/library/onDeck` 은 accountID 를
+// 조용히 무시하고, 공유 친구의 토큰은 얻을 방법이 없다(database/0007_watch_history.sql).
+// 그래서 "37분 남음" 이 아니라 **마지막으로 본 화의 다음 화**를 보여준다.
+//
+// 영화는 넣지 않는다. 기록에 남았다는 건 다 봤다는 뜻이라 이어볼 것이 없다.
+
+/** 이 프로필이 보다 만 시리즈. 마지막으로 본 시각이 최근인 순. */
+export async function getContinueWatching(profileId: number, limit = 20): Promise<LibraryItem[]> {
+  const rows = await query<ItemRow & { next_season: number; next_episode: number }>(
+    `WITH last_watched AS (
+       -- 시리즈마다 이 사람이 마지막으로 본 화
+       SELECT DISTINCT ON (h.show_rating_key)
+              h.show_rating_key, h.viewed_at, e.season_index, e.episode_index
+         FROM watch_history h
+         JOIN episode e ON e.rating_key = h.rating_key
+        WHERE h.type = 'episode'
+          AND h.plex_account_id = (SELECT plex_account_id FROM profile WHERE id = $1)
+          AND e.season_index IS NOT NULL AND e.episode_index IS NOT NULL
+        ORDER BY h.show_rating_key, h.viewed_at DESC
+     ),
+     next_up AS (
+       -- 그 다음 화. 없으면(다 봤으면) 이 시리즈는 줄에서 빠진다
+       SELECT DISTINCT ON (l.show_rating_key)
+              l.show_rating_key, l.viewed_at, e.season_index, e.episode_index
+         FROM last_watched l
+         JOIN episode e ON e.show_rating_key = l.show_rating_key AND e.deleted_at IS NULL
+        WHERE e.season_index IS NOT NULL AND e.episode_index IS NOT NULL
+          AND (e.season_index, e.episode_index) > (l.season_index, l.episode_index)
+        ORDER BY l.show_rating_key, e.season_index, e.episode_index
+     )
+     SELECT item.*, n.season_index AS next_season, n.episode_index AS next_episode
+       FROM next_up n
+       JOIN LATERAL (
+         ${ITEM_SELECT} WHERE m.rating_key = n.show_rating_key AND m.deleted_at IS NULL
+       ) item ON true
+      ORDER BY n.viewed_at DESC
+      LIMIT $2`,
+    [profileId, limit],
+  )
+
+  return rows.map((row) => ({
+    ...toItem(row),
+    badge:
+      row.next_season === 0
+        ? `스페셜 ${row.next_episode}화부터`
+        : `시즌 ${row.next_season} · ${row.next_episode}화부터`,
+  }))
 }
 
 // --- 연재 중인 시리즈 (관리자가 고른다) --------------------------------------

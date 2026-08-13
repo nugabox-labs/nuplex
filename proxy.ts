@@ -1,28 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import {
-  ADMIN_COOKIE,
-  PROFILE_COOKIE,
-  SESSION_COOKIE,
-  readProfileValue,
-  verifySessionValue,
-} from '@/lib/auth/session'
+import { ADMIN_COOKIE, PROFILE_COOKIE, readProfileValue, verifyAdminValue } from '@/lib/auth/session'
 
 // (Next.js 16 에서 middleware 파일 규약이 proxy 로 바뀌었다.)
 //
 // 두 겹이다.
-//   · 앱 전체 — 공통 비밀번호. 포스터 이미지(/media/*)도 예외가 아니다
-//     (라이브러리 구성이 그대로 드러나기 때문).
-//   · /admin — 별도의 관리자 비밀번호. 공통 비밀번호는 지인에게 공유하는 것이라
-//     그걸로 알림까지 보낼 수 있으면 안 된다.
+//   · 앱 전체 — 프로필. 프로필을 처음 고를 때 그 사람의 가입 이메일을 한 번 확인하는
+//     것이 유일한 관문이다. 포스터 이미지(/media/*)도 예외가 아니다 — 라이브러리
+//     구성이 그대로 드러나기 때문이다.
+//   · /admin — 별도의 관리자 비밀번호.
 //
-// 비밀번호를 통과하면 프로필을 고르게 한다. 알림을 사람별로 보내려면 "지금 누가
-// 보고 있는지" 를 알아야 하기 때문이다. 프로필 쿠키는 1년짜리라 한 번만 고르면 된다.
+// 프로필 쿠키는 1년짜리다. "나가기" 를 누르기 전까지는 다시 묻지 않는다.
 
-// 앱 셸의 원격 설정은 로그인 전에 읽힌다. 셸은 이 응답을 보고 나서야 어느 주소를
+// 앱 셸의 원격 설정은 입장 전에 읽힌다. 셸은 이 응답을 보고 나서야 어느 주소를
 // 웹뷰에 띄울지 안다 — 여기에 인증을 걸면 앱이 부팅되지 않는다(docs/APP-INTEGRATION.md).
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/app/config']
-// 로그인은 됐지만 아직 프로필을 안 고른 상태에서도 열려 있어야 하는 곳.
-const PROFILE_PATHS = ['/profile', '/api/profile', '/api/auth/logout', '/media']
+//
+// `/media/avatars` 만 열어 둔다. 프로필 선택 화면이 아직 아무 관문도 통과하지 않은
+// 사람에게 아바타를 보여줘야 하기 때문이다. 포스터는 그대로 막힌다.
+const PUBLIC_PATHS = [
+  '/welcome',
+  '/profile',
+  '/api/profile',
+  '/api/auth/logout',
+  '/api/app/config',
+  '/media/avatars',
+]
 const ADMIN_PUBLIC_PATHS = ['/admin/login', '/api/admin/login']
 
 function matches(pathname: string, paths: string[]): boolean {
@@ -34,7 +35,7 @@ export async function proxy(request: NextRequest) {
 
   // --- 관리자 영역 ---------------------------------------------------------
   if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWith('/api/admin')) {
-    const isAdmin = await verifySessionValue(request.cookies.get(ADMIN_COOKIE)?.value, 'admin')
+    const isAdmin = await verifyAdminValue(request.cookies.get(ADMIN_COOKIE)?.value)
 
     if (matches(pathname, ADMIN_PUBLIC_PATHS)) {
       if (isAdmin && pathname === '/admin/login') {
@@ -52,37 +53,24 @@ export async function proxy(request: NextRequest) {
   }
 
   // --- 일반 영역 -----------------------------------------------------------
-  const authenticated = await verifySessionValue(
-    request.cookies.get(SESSION_COOKIE)?.value,
-    'viewer',
-  )
+  const profileId = await readProfileValue(request.cookies.get(PROFILE_COOKIE)?.value)
 
   if (matches(pathname, PUBLIC_PATHS)) {
-    // 이미 들어와 있는데 로그인 화면으로 오면 홈으로 돌려보낸다.
-    if (authenticated && pathname === '/login') {
+    // 이미 들어와 있는데 입장 · 선택 화면으로 오면 홈으로 돌려보낸다.
+    if (profileId && (pathname === '/welcome' || pathname === '/profile')) {
       return NextResponse.redirect(new URL('/', request.url))
     }
     return NextResponse.next()
   }
 
-  if (authenticated) {
-    // 프로필을 아직 안 골랐으면 고르는 화면으로 보낸다.
-    const profileId = await readProfileValue(request.cookies.get(PROFILE_COOKIE)?.value)
-    if (!profileId && !matches(pathname, PROFILE_PATHS)) {
-      return NextResponse.redirect(withNext(new URL('/profile', request.url), request))
-    }
-    // 이미 골랐는데 선택 화면으로 오면 홈으로 돌려보낸다.
-    if (profileId && pathname === '/profile') {
-      return NextResponse.redirect(new URL('/', request.url))
-    }
-    return NextResponse.next()
-  }
+  if (profileId) return NextResponse.next()
 
-  return NextResponse.redirect(withNext(new URL('/login', request.url), request))
+  return NextResponse.redirect(withNext(new URL('/welcome', request.url), request))
 }
 
 /**
- * 원래 보려던 곳을 `next` 로 달아 준다. 외부 사이트로 튕기지 않도록 경로만 넘긴다.
+ * 원래 보려던 곳을 `next` 로 달아 준다. 입장 화면이 이 값을 프로필 선택으로
+ * 그대로 넘기고, 프로필을 고른 뒤 그리로 간다. 외부 사이트로 튕기지 않도록 경로만 넘긴다.
  *
  * **쿼리를 함께 실어야 한다.** 채팅 푸시의 라우트는 `/?chat=12` 라 경로만 보면 `/` 다 —
  * 경로만으로 판단하면 쿼리가 통째로 버려져, 알림을 탭한 사람이 로그인 뒤 홈으로 간다
@@ -96,7 +84,8 @@ function withNext(destination: URL, request: NextRequest): URL {
 
 export const config = {
   // Next.js 내부 자산과 파비콘 · OG 이미지는 검사하지 않는다(OG 는 외부 미리보기가 읽어야 한다).
+  // 입장 화면 배경(/intro/*)도 마찬가지다 — 아직 아무 관문도 통과하지 않은 사람이 보는 그림이다.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon-64.png|apple-icon.png|og.png).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon-64.png|apple-icon.png|og.png|intro/).*)',
   ],
 }
