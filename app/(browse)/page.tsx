@@ -2,13 +2,14 @@ import { cookies } from 'next/headers'
 import { CollectionRow } from '@/components/collection-row'
 import { ContentRow } from '@/components/content-row'
 import { HeroCarousel } from '@/components/hero-carousel'
+import { HomeRows } from '@/components/home-rows'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
 import {
   getContinueWatching,
   getFeaturedSeries,
   getHeroItems,
   getHomeRows,
-  listCollections,
+  listShuffledCollections,
 } from '@/lib/library'
 
 // 매 요청마다 DB 를 읽는다. 같은 호스트의 Postgres 조회라 충분히 빠르고,
@@ -22,7 +23,7 @@ export default async function HomePage() {
   const [heroItems, rows, collections, featured, continueWatching] = await Promise.all([
     getHeroItems(10),
     getHomeRows(),
-    listCollections(),
+    listShuffledCollections(),
     getFeaturedSeries(),
     profileId ? getContinueWatching(profileId) : [],
   ])
@@ -54,14 +55,20 @@ export default async function HomePage() {
           <ContentRow row={{ key: 'featured', title: '현재 연재 중인 시리즈', items: featured }} />
         ) : null}
 
-        {/* 최근 추가 바로 다음에 시리즈 모음을 끼운다 */}
+        {/* 최근 추가 바로 다음에 시리즈 모음을 끼운다. 여기까지가 고정 자리다 */}
         {rows.slice(0, 1).map((row) => (
           <ContentRow key={row.key} row={row} />
         ))}
         <CollectionRow collections={collections} href="/collections" />
-        {rows.slice(1).map((row) => (
-          <ContentRow key={row.key} row={row} />
-        ))}
+
+        {/* 라이브러리 줄은 보는 사람이 순서를 바꿀 수 있다 */}
+        <HomeRows
+          rows={rows.slice(1).map((row) => ({
+            key: row.key,
+            title: row.title,
+            node: <ContentRow row={row} />,
+          }))}
+        />
       </div>
     </>
   )

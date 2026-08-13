@@ -105,6 +105,17 @@
   .font-logo {
     font-family: var(--font-logo);
   }
+  /* 고정 상단 바 아래로 내용을 밀어내는 공통 여백. 좁은 화면의 상단 바는
+     로고 줄 + 분류 줄 두 층(약 104px)이라 더 준다. 화면마다 숫자를 따로 쓰면
+     금방 어긋난다 — 목록 화면은 전부 이 클래스를 쓴다. */
+  .page-top {
+    padding-top: 8.5rem;
+  }
+  @media (min-width: 1024px) {
+    .page-top {
+      padding-top: 7rem;
+    }
+  }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;

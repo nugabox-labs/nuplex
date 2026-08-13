@@ -406,8 +406,11 @@ export function imageUrl(
   return url.toString()
 }
 
-/** 딥링크 — 브라우저에서 Plex 앱/웹으로 넘긴다. */
-export function buildPlexDeepLink(serverId: string, ratingKey: string): string {
+/**
+ * 딥링크 — 브라우저에서 Plex 로 넘긴다.
+ * app.plex.tv 가 아니라 서버가 직접 서빙하는 웹앱을 쓴다(이유는 lib/library.ts 의 같은 함수).
+ */
+export function buildPlexDeepLink(baseUrl: string, serverId: string, ratingKey: string): string {
   const key = encodeURIComponent(`/library/metadata/${ratingKey}`)
-  return `https://app.plex.tv/desktop/#!/server/${serverId}/details?key=${key}`
+  return `${baseUrl.replace(/\/+$/, '')}/web/index.html#!/server/${serverId}/details?key=${key}`
 }

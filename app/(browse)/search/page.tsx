@@ -21,9 +21,7 @@ export default async function SearchPage({
     : [[], []]
 
   return (
-    // 상단 바가 좁은 화면에서는 분류 줄까지 두 층(약 104px)이라 pt-24 로는 검색창이
-    // 바로 밑에 붙는다. 층 수에 맞춰 여백을 달리 준다.
-    <div className="mx-auto max-w-5xl px-4 pb-20 pt-32 md:px-8 lg:pt-28">
+    <div className="page-top mx-auto max-w-5xl px-4 pb-20 md:px-8">
       <SearchBox initialQuery={term} />
 
       <div className="mt-8">

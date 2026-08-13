@@ -78,12 +78,20 @@ export function Navbar({
     <header
       className={cn(
         'fixed inset-x-0 top-0 z-50 transition-colors duration-300',
-        scrolled
-          ? 'border-b border-border bg-background/85 backdrop-blur-md'
-          : 'bg-gradient-to-b from-background/90 to-transparent',
+        scrolled ? 'border-b border-border bg-background/85 backdrop-blur-md' : null,
       )}
     >
-      <div className="flex h-16 items-center gap-3 px-4 md:px-8">
+      {/* 맨 위에서는 히어로 이미지가 상단 바 뒤로 비친다. 밝은 장면이 오면 메뉴 글씨가
+          묻히므로 검은 막을 한 겹 깐다. 막은 상단 바보다 조금 더 내려와 끝에서
+          부드럽게 사라진다 — 경계선이 생기면 오히려 눈에 걸린다. */}
+      {!scrolled ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[130%] bg-gradient-to-b from-background via-background/80 to-transparent"
+        />
+      ) : null}
+
+      <div className="relative flex h-16 items-center gap-3 px-4 md:px-8">
         <Link href="/" className="font-logo shrink-0 select-none text-2xl font-black tracking-tight">
           <span className="text-foreground">NU</span>
           <span className="text-primary">PLEX</span>
@@ -134,7 +142,7 @@ export function Navbar({
                 </button>
 
                 {openGroup === group.group ? (
-                  <ul className="absolute left-0 top-full mt-1 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-2xl">
+                  <ul className="absolute left-0 top-full z-10 mt-1 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-2xl">
                     {group.sections.map((section) => (
                       <li key={section.id}>
                         <Link
@@ -171,17 +179,8 @@ export function Navbar({
           </Link>
           <ChatPanel />
           <NoticeBell />
-          {showAdminLink ? (
-            <Link
-              href="/admin/notices"
-              aria-label="관리자"
-              title="관리자"
-              className="flex items-center justify-center rounded-full border border-primary/40 bg-primary/10 p-2 text-primary transition hover:bg-primary/20"
-            >
-              <ShieldCheck className="h-5 w-5" />
-            </Link>
-          ) : null}
-          {/* 프로필 사진이 곧 메뉴 버튼이다. 지금은 "나가기" 하나뿐 */}
+          {/* 프로필 사진이 곧 메뉴 버튼이다. 관리자 진입점도 이 안에 둔다 —
+              상단 줄에 아이콘을 하나 더 놓으면 좁은 화면이 금방 빡빡해진다 */}
           <div ref={profileRef} className="relative">
             <button
               type="button"
@@ -203,11 +202,21 @@ export function Navbar({
             </button>
 
             {profileOpen ? (
-              <div className="absolute right-0 top-full mt-2 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-2xl">
+              /* z-10 이 없으면 아래 분류 줄이 DOM 순서상 뒤라 팝업 위에 겹쳐 찍힌다 */
+              <div className="absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-2xl">
                 {profile ? (
                   <p className="truncate px-4 py-2 text-sm font-semibold text-foreground">
                     {profile.name}
                   </p>
+                ) : null}
+                {showAdminLink ? (
+                  <Link
+                    href="/admin/notices"
+                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-primary transition hover:bg-secondary"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    관리자
+                  </Link>
                 ) : null}
                 <button
                   type="button"
@@ -225,7 +234,7 @@ export function Navbar({
 
       {/* 좁은 화면 — 구분만 늘어놓고, 하위 분류는 눌러서 아래로 편다.
           전부 펼쳐두면 줄이 화면 몇 배로 길어져 무엇이 있는지 한눈에 안 들어온다. */}
-      <div ref={mobileNavRef} className="lg:hidden">
+      <div ref={mobileNavRef} className="relative lg:hidden">
         <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pb-2">
           <NavLink href="/" active={pathname === '/'} icon={Home} label="홈" />
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />

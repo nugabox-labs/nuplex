@@ -85,10 +85,15 @@ function seasonLabel(title: string, seasonIndex: number | null): string {
   return seasonIndex === null ? title : `시즌 ${seasonIndex}`
 }
 
+// app.plex.tv 로 보내면 안 된다. 새 Plex 웹앱은 `#!/server/<id>/details?key=…` 를
+// "Not found" 로 돌려준다(폰 · 데스크탑 양쪽에서 실측). 서버가 직접 서빙하는 웹앱
+// (`<서버>/web/index.html`)은 같은 주소 모양을 그대로 받는다.
+// 주소 문자열을 만들 뿐 Plex 를 호출하지는 않는다 — AGENTS §2 의 경계는 지킨다.
 function plexDeepLink(ratingKey: string): string {
+  const baseUrl = (process.env.PLEX_BASE_URL ?? '').replace(/\/+$/, '')
   const serverId = process.env.PLEX_SERVER_ID ?? ''
   const key = encodeURIComponent(`/library/metadata/${ratingKey}`)
-  return `https://app.plex.tv/desktop/#!/server/${serverId}/details?key=${key}`
+  return `${baseUrl}/web/index.html#!/server/${serverId}/details?key=${key}`
 }
 
 function toItem(row: ItemRow): LibraryItem {
@@ -280,6 +285,20 @@ export async function listCollections(sectionId?: number): Promise<Collection[]>
     .sort((a, b) => compareSectionTitles(a.sectionTitle, b.sectionTitle))
 }
 
+/**
+ * 홈 줄에 쓰는 시리즈 모음. 구분을 따지지 않고 통째로 섞는다 — 구분 순으로 두면
+ * 앞쪽 라이브러리의 모음만 계속 보이고 뒤쪽은 영영 안 보인다.
+ * 구분별로 나눠 보는 자리는 라이브러리 화면과 /collections 이다.
+ */
+export async function listShuffledCollections(): Promise<Collection[]> {
+  const rows = await query<CollectionRow>(
+    `${COLLECTION_SELECT}
+      WHERE c.deleted_at IS NULL
+      ORDER BY random()`,
+  )
+  return rows.filter((row) => Number(row.count) > 0).map(toCollection)
+}
+
 export async function getCollection(ratingKey: string): Promise<Collection | null> {
   const row = await queryOne<CollectionRow>(
     `${COLLECTION_SELECT} WHERE c.rating_key = $1 AND c.deleted_at IS NULL`,
@@ -356,6 +375,31 @@ const ROW_SIZE = 20
  * 홈 화면의 가로 줄들.
  * 맨 위 "최근 추가" 를 빼면 나머지는 전부 Plex 섹션 그대로다 — 우리가 새로 묶지 않는다.
  */
+// 홈에 라이브러리 줄이 나오는 기본 차례. Plex 섹션 제목을 그대로 적는다 —
+// 분류 이름은 우리가 새로 짓지 않는다(AGENTS §2). 여기 없는 섹션은 이 뒤에
+// 원래 순서대로 붙으므로, 섹션이 새로 생겨도 화면에서 사라지지 않는다.
+// 보는 사람이 이 순서를 직접 바꾼 경우는 화면 쪽에서 덮어쓴다(components/home-rows.tsx).
+const HOME_SECTION_ORDER = [
+  '영화 | 한국',
+  '영화 | 외국',
+  '드라마 | 한국',
+  '예능',
+  '애니 | TVA',
+  '애니 | 극장판',
+  '드라마 | 외국',
+  '드라마 | 중국',
+  '드라마 | 일본',
+  '영화 | 뮤지컬',
+  '영화 | 고전',
+]
+
+/** 제목 앞뒤 · 파이프 주변 공백이 달라도 같은 줄로 보게 맞춘다. */
+function homeOrderIndex(title: string): number {
+  const normalized = title.trim().replace(/\s*\|\s*/g, ' | ')
+  const index = HOME_SECTION_ORDER.indexOf(normalized)
+  return index === -1 ? HOME_SECTION_ORDER.length : index
+}
+
 export async function getHomeRows(): Promise<LibraryRow[]> {
   const [recent, sections] = await Promise.all([
     query<ItemRow>(
@@ -382,6 +426,8 @@ export async function getHomeRows(): Promise<LibraryRow[]> {
       ).map(toItem),
     })),
   )
+
+  sectionRows.sort((a, b) => homeOrderIndex(a.title) - homeOrderIndex(b.title))
 
   return [{ key: 'recent', title: '최근 추가', items: recent.map(toItem) }, ...sectionRows].filter(
     (row) => row.items.length > 0,

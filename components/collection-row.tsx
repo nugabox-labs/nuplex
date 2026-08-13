@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Layers } from 'lucide-react'
 import type { Collection } from '@/lib/library'
 
-// Plex 에서 사람이 직접 묶은 시리즈 모음. 작품 카드(세로 2:3)와 구분되도록
-// 가로로 넓은 카드에 배경 이미지를 깐다.
+// Plex 에서 사람이 직접 묶은 시리즈 모음. 사람이 직접 고른 포스터가 있으니
+// 그걸 쓴다 — 배경 이미지는 어느 장면이냐에 따라 무슨 시리즈인지 알아보기 어렵다.
+// 모양은 작품 카드와 같은 세로 2:3 이고, 제목 줄에 붙은 아이콘으로 구분된다.
 
 export function CollectionRow({
   collections,
@@ -72,27 +73,32 @@ export function CollectionRow({
 }
 
 export function CollectionCard({ collection }: { collection: Collection }) {
-  const image = collection.backdrop ?? collection.poster
+  const image = collection.poster ?? collection.backdrop
 
   return (
     <Link
       href={`/collection/${collection.ratingKey}`}
-      className="group relative aspect-video w-56 shrink-0 overflow-hidden rounded-lg border border-border bg-card transition hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary md:w-64"
+      className="group w-40 shrink-0 overflow-hidden rounded-lg border border-border bg-card transition hover:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:w-44 md:w-48"
     >
-      {image ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={image}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
-          loading="lazy"
-        />
-      ) : null}
-      <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+      <div className="relative aspect-[2/3] w-full overflow-hidden bg-secondary">
+        {image ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={image}
+            alt=""
+            className="h-full w-full object-cover transition duration-500 group-hover:brightness-75"
+            loading="lazy"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center px-3 text-center text-sm text-muted-foreground">
+            {collection.title}
+          </span>
+        )}
+      </div>
 
-      <div className="absolute inset-x-0 bottom-0 p-3">
-        <h3 className="line-clamp-2 text-sm font-bold text-foreground">{collection.title}</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">{collection.count}편</p>
+      <div className="space-y-0.5 p-3">
+        <h3 className="truncate text-sm font-semibold text-foreground">{collection.title}</h3>
+        <p className="truncate text-xs text-muted-foreground">{collection.count}편</p>
       </div>
     </Link>
   )

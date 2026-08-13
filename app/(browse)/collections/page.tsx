@@ -11,7 +11,7 @@ export default async function CollectionsPage() {
   const groups = groupCollectionsBySection(collections)
 
   return (
-    <div className="px-4 pb-20 pt-24 md:px-8">
+    <div className="page-top px-4 pb-20 md:px-8">
       <h1 className="mb-2 text-2xl font-bold text-foreground md:text-3xl">
         시리즈 모음
         <span className="ml-2 text-base font-normal text-muted-foreground">

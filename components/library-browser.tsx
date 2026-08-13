@@ -41,7 +41,7 @@ export async function LibraryBrowser({
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
-    <div className="pb-20 pt-24">
+    <div className="page-top pb-20">
       {collections.length > 0 ? (
         <div className="mb-8">
           <CollectionRow collections={collections} />

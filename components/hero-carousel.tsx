@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Info, Play, Star } from 'lucide-react'
 import type { LibraryItem } from '@/lib/library'
 import { formatLength, formatRating, metaLine, typeLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { PlexLink } from './plex-link'
 
 // 최근 추가된 작품을 배경째로 넘겨 보여준다.
 // 자동으로 넘어가되, 사람이 직접 넘기면 그때부터 멈춘다 — 읽는 중에 화면이
@@ -112,7 +113,7 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
             transition={{ duration: 0.5, ease: 'easeOut' }}
           >
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wider text-primary">
-              최근 추가 · {typeLabel(item.type)}
+              {typeLabel(item.type)}
             </span>
 
             <h1 className="mt-4 text-pretty text-4xl font-black leading-tight tracking-tight text-foreground md:text-6xl">
@@ -138,15 +139,13 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
             ) : null}
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a
+              <PlexLink
                 href={item.plexUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <Play className="h-5 w-5 fill-current" />
                 Plex에서 시청하기
-              </a>
+              </PlexLink>
               <Link
                 href={`/title/${item.ratingKey}`}
                 className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/60 px-6 py-3 text-sm font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"

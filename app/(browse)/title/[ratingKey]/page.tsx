@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Play, Star } from 'lucide-react'
 import { ContentRow } from '@/components/content-row'
+import { PlexLink } from '@/components/plex-link'
 import { SeasonList } from '@/components/season-list'
 import {
   getCollectionItems,
@@ -119,15 +120,13 @@ export default async function TitlePage({
               </div>
             ) : null}
 
-            <a
+            <PlexLink
               href={item.plexUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               className="mt-6 inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <Play className="h-5 w-5 fill-current" />
               Plex에서 시청하기
-            </a>
+            </PlexLink>
           </div>
         </div>
 
