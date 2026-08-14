@@ -49,6 +49,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '이메일이 맞지 않습니다.' }, { status: 401 })
   }
 
+  // 관리자 프로필은 이메일만으로 통과시키지 않는다 — 이 프로필로 들어오면 관리자
+  // 화면 진입점이 열린다. 열람용 관문과 관리자 비밀번호는 서로 다른 값이어야 한다는
+  // 원칙(AGENTS §2)에 따라 `.env` 의 ADMIN_PASSWORD 를 그대로 쓴다.
+  if (profile.isPlexAdmin) {
+    const expected = process.env.ADMIN_PASSWORD
+    const given = typeof body?.adminPassword === 'string' ? body.adminPassword : ''
+    if (!expected || given !== expected) {
+      return NextResponse.json({ error: '관리자 비밀번호가 맞지 않습니다.' }, { status: 401 })
+    }
+  }
+
   attempts.delete(`${profileId}:${ip}`)
 
   const response = NextResponse.json({ ok: true, profile })

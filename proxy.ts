@@ -18,6 +18,7 @@ import { ADMIN_COOKIE, PROFILE_COOKIE, readProfileValue, verifyAdminValue } from
 // 사람에게 아바타를 보여줘야 하기 때문이다. 포스터는 그대로 막힌다.
 const PUBLIC_PATHS = [
   '/welcome',
+  '/guide',
   '/profile',
   '/api/profile',
   '/api/auth/logout',

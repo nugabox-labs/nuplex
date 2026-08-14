@@ -13,6 +13,8 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
   const searchParams = useSearchParams()
   const [selected, setSelected] = useState<Profile | null>(null)
   const [email, setEmail] = useState('')
+  /** 관리자 프로필로 들어갈 때만 함께 묻는다 */
+  const [adminPassword, setAdminPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
@@ -25,7 +27,7 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
     const res = await fetch('/api/profile/select', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profileId: selected.id, email }),
+      body: JSON.stringify({ profileId: selected.id, email, adminPassword }),
     })
 
     if (res.ok) {
@@ -50,6 +52,7 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
           onClick={() => {
             setSelected(null)
             setEmail('')
+            setAdminPassword('')
             setError(null)
           }}
           className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
@@ -81,11 +84,28 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
           className="mt-6 w-full rounded-md border border-border bg-secondary/60 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
 
+        {/* 관리자 프로필은 이메일 하나로는 부족하다. 이 프로필로 들어오면 관리자
+            화면 진입점이 열리므로 비밀번호를 한 겹 더 둔다 */}
+        {selected.isPlexAdmin ? (
+          <input
+            type="password"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            placeholder="관리자 비밀번호"
+            autoComplete="current-password"
+            className="mt-3 w-full rounded-md border border-border bg-secondary/60 px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+        ) : null}
+
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
 
         <button
           type="submit"
-          disabled={pending || email.trim().length === 0}
+          disabled={
+            pending ||
+            email.trim().length === 0 ||
+            (selected.isPlexAdmin && adminPassword.length === 0)
+          }
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -108,6 +128,11 @@ export function ProfilePicker({ profiles }: { profiles: Profile[] }) {
           <span className="w-full truncate text-center text-sm text-muted-foreground transition group-hover:text-foreground">
             {profile.name}
           </span>
+          {profile.isPlexAdmin ? (
+            <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              관리자
+            </span>
+          ) : null}
         </button>
       ))}
     </div>

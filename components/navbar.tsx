@@ -25,20 +25,12 @@ export function Navbar({
   showAdminLink?: boolean
 }) {
   const pathname = usePathname()
-  const [scrolled, setScrolled] = useState(false)
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
   const navRef = useRef<HTMLDivElement>(null)
   const mobileNavRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
   const openSections = groups.find((group) => group.group === openGroup)?.sections ?? []
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   // 바깥을 누르거나 화면이 바뀌면 열린 메뉴를 닫는다.
   useEffect(() => {
@@ -75,21 +67,14 @@ export function Navbar({
   }
 
   return (
-    <header
-      className={cn(
-        'fixed inset-x-0 top-0 z-50 transition-colors duration-300',
-        scrolled ? 'border-b border-border bg-background/85 backdrop-blur-md' : null,
-      )}
-    >
-      {/* 맨 위에서는 히어로 이미지가 상단 바 뒤로 비친다. 밝은 장면이 오면 메뉴 글씨가
-          묻히므로 검은 막을 한 겹 깐다. 막은 상단 바보다 조금 더 내려와 끝에서
-          부드럽게 사라진다 — 경계선이 생기면 오히려 눈에 걸린다. */}
-      {!scrolled ? (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-[130%] bg-gradient-to-b from-background via-background/80 to-transparent"
-        />
-      ) : null}
+    <header className="fixed inset-x-0 top-0 z-50">
+      {/* 뒤로 화면이 비쳐도 메뉴 글씨가 읽히도록 검은 막을 한 겹 깐다. 스크롤해도
+          모양이 바뀌지 않는다 — 유리(블러) + 아래 테두리로 바꾸면 상단 바가 화면에서
+          잘려 보인다. 막은 상단 바보다 내려와 끝에서 서서히 사라져 경계가 없다. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[130%] bg-gradient-to-b from-background via-background/85 to-transparent"
+      />
 
       <div className="relative flex h-16 items-center gap-3 px-4 md:px-8">
         <Link href="/" className="font-logo shrink-0 select-none text-2xl font-black tracking-tight">
@@ -177,7 +162,7 @@ export function Navbar({
           >
             <Search className="h-5 w-5" />
           </Link>
-          <ChatPanel />
+          <ChatPanel adminSelf={showAdminLink} />
           <NoticeBell />
           {/* 프로필 사진이 곧 메뉴 버튼이다. 관리자 진입점도 이 안에 둔다 —
               상단 줄에 아이콘을 하나 더 놓으면 좁은 화면이 금방 빡빡해진다 */}

@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react'
 export function AdminLoginForm({
   endpoint = '/api/admin/login',
   defaultNext = '/admin/notices',
-  username = 'root',
+  username = 'ngjang@kakao.com',
 }: {
   endpoint?: string
   defaultNext?: string
@@ -50,7 +50,7 @@ export function AdminLoginForm({
 
   return (
     <form onSubmit={onSubmit} className="mt-8 space-y-3">
-      {/* 아이디는 root 하나뿐이다. disabled 로 두면 값이 제출에 안 실리므로
+      {/* 아이디는 하나뿐이다. disabled 로 두면 값이 제출에 안 실리므로
           readOnly 로 두고 보기에만 잠긴 것처럼 만든다. 서버도 값을 다시 확인한다. */}
       {username ? (
         <input

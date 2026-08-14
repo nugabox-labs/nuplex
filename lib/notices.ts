@@ -85,6 +85,35 @@ export async function createNotice(
   return { ...notice, targetProfileIds }
 }
 
+/**
+ * 올린 알림을 고친다. 게시판처럼 쓰기 때문에 오타 하나 때문에 지웠다 다시 올리면
+ * 푸시가 두 번 나간다 — 그걸 막으려고 있는 자리다.
+ * 대상(targetProfileIds)도 함께 맞춘다. 푸시는 다시 보내지 않는다.
+ */
+export async function updateNotice(
+  id: string,
+  title: string,
+  body: string,
+  targetProfileIds: number[] = [],
+): Promise<Notice | null> {
+  const row = await queryOne<NoticeRow>(
+    `UPDATE notice SET title = $2, body = $3 WHERE id = $1
+     RETURNING id, title, body, published_at`,
+    [id, title, body],
+  )
+  if (!row) return null
+
+  await db.query(`DELETE FROM notice_target WHERE notice_id = $1`, [id])
+  for (const profileId of targetProfileIds) {
+    await db.query(
+      `INSERT INTO notice_target (notice_id, profile_id) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [id, profileId],
+    )
+  }
+  return { ...toNotice(row), targetProfileIds }
+}
+
 export async function deleteNotice(id: string): Promise<boolean> {
   const result = await db.query(`DELETE FROM notice WHERE id = $1`, [id])
   return (result.rowCount ?? 0) > 0

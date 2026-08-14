@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Send, Sparkles, Trash2, Users } from 'lucide-react'
+import { Check, Loader2, Pencil, Send, Sparkles, Trash2, Users, X } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/format'
 import type { Profile } from '@/lib/profiles'
 import { cn } from '@/lib/utils'
@@ -24,6 +24,8 @@ export function NoticeAdmin() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   // 비어 있으면 전체 발송이다.
   const [targets, setTargets] = useState<number[]>([])
+  /** 고치는 중인 알림. 게시판처럼 쓰므로 지웠다 다시 올리지 않고 그 자리에서 손본다 */
+  const [editing, setEditing] = useState<{ id: string; title: string; body: string } | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/admin/notices')
@@ -89,7 +91,25 @@ export function NoticeAdmin() {
   }
 
   async function remove(id: string) {
+    if (!window.confirm('이 알림을 지울까요? 되돌릴 수 없습니다.')) return
     await fetch(`/api/admin/notices/${id}`, { method: 'DELETE' })
+    await load()
+  }
+
+  async function saveEdit(notice: Notice) {
+    if (!editing) return
+    const res = await fetch(`/api/admin/notices/${editing.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: editing.title,
+        body: editing.body,
+        // 받는 사람은 그대로 둔다. 여기서 바꾸면 알림이 조용히 사라지는 사람이 생긴다.
+        targetProfileIds: notice.targetProfileIds ?? [],
+      }),
+    })
+    setMessage(res.ok ? '알림을 고쳤습니다. 푸시는 다시 보내지 않습니다.' : '고치지 못했습니다.')
+    setEditing(null)
     await load()
   }
 
@@ -202,7 +222,7 @@ export function NoticeAdmin() {
       </form>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold text-foreground">보낸 알림 {notices.length}건</h2>
+        <h2 className="mb-3 text-lg font-bold text-foreground">올린 알림 {notices.length}건</h2>
         {notices.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">아직 없습니다.</p>
         ) : (
@@ -210,19 +230,60 @@ export function NoticeAdmin() {
             {notices.map((notice) => (
               <li key={notice.id} className="py-4">
                 <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="font-semibold text-foreground">{notice.title}</h3>
+                  {editing?.id === notice.id ? (
+                    <input
+                      value={editing.title}
+                      onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                      className="min-w-0 flex-1 rounded-md border border-border bg-secondary/60 px-3 py-1.5 text-sm font-semibold text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                  ) : (
+                    <h3 className="font-semibold text-foreground">{notice.title}</h3>
+                  )}
                   <div className="flex shrink-0 items-center gap-3">
                     <time className="text-xs text-muted-foreground">
                       {formatRelativeTime(notice.publishedAt)}
                     </time>
-                    <button
-                      type="button"
-                      onClick={() => remove(notice.id)}
-                      aria-label="삭제"
-                      className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {editing?.id === notice.id ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => saveEdit(notice)}
+                          aria-label="저장"
+                          className="rounded-md p-1 text-primary transition hover:bg-secondary"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(null)}
+                          aria-label="취소"
+                          className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditing({ id: notice.id, title: notice.title, body: notice.body })
+                          }
+                          aria-label="고치기"
+                          className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => remove(notice.id)}
+                          aria-label="삭제"
+                          className="rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -232,9 +293,18 @@ export function NoticeAdmin() {
                         .join(' · ')
                     : '전체'}
                 </p>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                  {notice.body}
-                </p>
+                {editing?.id === notice.id ? (
+                  <textarea
+                    value={editing.body}
+                    onChange={(e) => setEditing({ ...editing, body: e.target.value })}
+                    rows={8}
+                    className="mt-2 w-full resize-y rounded-md border border-border bg-secondary/60 px-3 py-2 text-sm leading-relaxed text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
+                ) : (
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                    {notice.body}
+                  </p>
+                )}
               </li>
             ))}
           </ul>

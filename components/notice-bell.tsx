@@ -88,7 +88,7 @@ export function NoticeBell() {
               exit={{ opacity: 0, y: -20, scale: 0.98 }}
               transition={{ type: 'spring', stiffness: 260, damping: 26 }}
               onClick={(e) => e.stopPropagation()}
-              className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
+              className="flex h-[70vh] max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
             >
               <div className="flex items-center gap-3 border-b border-border px-5 py-3">
                 <Bell className="h-5 w-5 text-primary" />
@@ -103,17 +103,25 @@ export function NoticeBell() {
                 </button>
               </div>
 
-              <div className="overflow-y-auto">
+              <div className="flex-1 overflow-y-auto">
                 {notices.length === 0 ? (
                   <p className="px-5 py-16 text-center text-sm text-muted-foreground">
                     아직 도착한 알림이 없습니다.
                   </p>
                 ) : (
                   <ul className="divide-y divide-border/60">
-                    {notices.map((notice) => (
+                    {notices.map((notice, index) => (
                       <li key={notice.id} className="px-5 py-4">
                         <div className="flex items-baseline justify-between gap-3">
-                          <h3 className="font-semibold text-foreground">{notice.title}</h3>
+                          <h3 className="min-w-0 font-semibold text-foreground">
+                            {/* 맨 위 한 건에만 붙인다. 목록이 길어져도 어디부터 볼지 알 수 있다 */}
+                            {index === 0 ? (
+                              <span className="mr-2 inline-flex shrink-0 items-center rounded-full bg-primary px-2 py-0.5 align-middle text-[11px] font-bold text-primary-foreground">
+                                최신
+                              </span>
+                            ) : null}
+                            {notice.title}
+                          </h3>
                           <time className="shrink-0 text-xs text-muted-foreground">
                             {formatRelativeTime(notice.publishedAt)}
                           </time>

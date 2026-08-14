@@ -24,7 +24,9 @@ function tooManyAttempts(key: string): boolean {
   return record.count > MAX_ATTEMPTS
 }
 
-const ADMIN_USERNAME = 'root'
+// 아이디는 Plex 서버 소유 계정의 이메일이다. 비밀번호와 달리 감춰야 할 값이 아니라
+// 화면에 고정해 두고 서버에서도 같은 값을 확인한다.
+const ADMIN_USERNAME = 'ngjang@kakao.com'
 
 function timingSafeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null)
   const password = typeof body?.password === 'string' ? body.password : ''
-  // 아이디는 root 하나뿐이고 화면에서 고정돼 있지만 서버에서도 확인한다 —
+  // 아이디는 하나뿐이고 화면에서 고정돼 있지만 서버에서도 확인한다 —
   // 화면에서 고정한 값은 언제든 우회할 수 있다.
   const username = typeof body?.username === 'string' ? body.username.trim() : ''
 

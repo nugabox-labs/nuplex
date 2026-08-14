@@ -36,7 +36,7 @@ interface ChatEvent {
   messageId: string
 }
 
-export function ChatPanel() {
+export function ChatPanel({ adminSelf = false }: { adminSelf?: boolean }) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<View>({ kind: 'list' })
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -187,6 +187,7 @@ export function ChatPanel() {
                 <ConversationList
                   conversations={conversations}
                   admin={admin}
+                  adminSelf={adminSelf}
                   onCompose={() => setView({ kind: 'compose' })}
                   onRequest={(partner) => void openRoom(partner, REQUEST_TEMPLATE)}
                   onOpen={(conversation) =>
@@ -246,6 +247,7 @@ function AdminBadge() {
 function ConversationList({
   conversations,
   admin,
+  adminSelf,
   onCompose,
   onRequest,
   onOpen,
@@ -253,6 +255,8 @@ function ConversationList({
   conversations: Conversation[]
   /** 작품을 신청할 관리자. 없으면 신청 버튼을 감춘다 */
   admin: ChatPartner | null
+  /** 내가 그 관리자인 경우. 버튼은 보여주되 누를 수는 없다 */
+  adminSelf?: boolean
   onCompose: () => void
   onRequest: (admin: ChatPartner) => void
   onOpen: (conversation: Conversation) => void
@@ -321,6 +325,22 @@ function ConversationList({
             <Film className="h-4 w-4" />
             관리자에게 작품 신청하기
           </button>
+        ) : adminSelf ? (
+          /* 관리자 본인에게는 신청할 상대가 없다. 다른 사람 화면에 이 버튼이 어떻게
+             보이는지 확인할 수 있게 자리만 남기고 누르지는 못하게 둔다. */
+          <div>
+            <button
+              type="button"
+              disabled
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary/60 px-4 py-2.5 text-sm font-semibold text-foreground"
+            >
+              <Film className="h-4 w-4" />
+              관리자에게 작품 신청하기
+            </button>
+            <p className="mt-1.5 text-center text-xs text-muted-foreground">
+              관리자 본인이라 신청할 상대가 없습니다
+            </p>
+          </div>
         ) : null}
       </div>
     </>
