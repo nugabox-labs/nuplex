@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { BookOpen, MessageCircle } from 'lucide-react'
-import { safeNext } from '@/lib/utils'
+import { isNuplexApp, safeNext } from '@/lib/utils'
 
 // 입장 화면. 여기서는 아무것도 묻지 않는다 — 관문은 프로필을 처음 고를 때
 // 확인하는 가입 이메일 하나뿐이다(docs/SECURITY.md).
@@ -30,6 +31,9 @@ export default async function WelcomePage({
   // safeNext 가 외부 주소 · 입장 흐름 · 없어진 옛 경로를 걸러낸다(docs/CHAT.md §5).
   const carried = safeNext((await searchParams).next)
   const enterHref = carried === '/' ? '/profile' : `/profile?next=${encodeURIComponent(carried)}`
+
+  // 앱 안에서는 이미 앱을 쓰고 있는 사람에게 앱을 받으라고 안내하는 셈이라 숨긴다.
+  const inApp = isNuplexApp((await headers()).get('user-agent'))
 
   return (
     <main className="relative flex h-[100dvh] flex-col items-center justify-center overflow-hidden px-6 py-8">
@@ -90,14 +94,16 @@ export default async function WelcomePage({
           </Link>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <StoreLink href={APP_STORE_URL} store="App Store">
-            <AppleLogo />
-          </StoreLink>
-          <StoreLink href={PLAY_STORE_URL} store="Google Play">
-            <PlayStoreLogo />
-          </StoreLink>
-        </div>
+        {!inApp && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <StoreLink href={APP_STORE_URL} store="App Store">
+              <AppleLogo />
+            </StoreLink>
+            <StoreLink href={PLAY_STORE_URL} store="Google Play">
+              <PlayStoreLogo />
+            </StoreLink>
+          </div>
+        )}
       </div>
     </main>
   )

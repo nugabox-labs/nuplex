@@ -21,3 +21,12 @@ export function safeNext(next: string | null | undefined): string {
   if (path === '/login' || path === '/welcome' || path === '/profile') return '/'
   return next
 }
+
+/**
+ * 요청이 앱 셸(webview) 안에서 온 것인지 판별한다. 앱은 UA 에 접미사를 붙인다
+ * (`docs/BRIDGE_CONTRACT.md` §2). 공백 개수가 아니라 정규식으로 파싱할 것 —
+ * Capacitor 8 에서 공백 처리 동작이 바뀐 이력이 있다.
+ */
+export function isNuplexApp(userAgent: string | null | undefined): boolean {
+  return !!userAgent && /NuplexApp \((ios|android); bridge\/\d+\)/.test(userAgent)
+}
