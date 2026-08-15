@@ -24,6 +24,14 @@
 
 웹뷰 로드 시 `window.NuplexNative` 가 주입된다. 브라우저에는 없다.
 
+주입은 **네이티브가 문서 시작 시점에** 한다(ADR-004). 따라서 웹의 첫 스크립트가
+돌기 전에 이미 존재한다. 그래도 순서를 확신할 수 없다면 `nuplexnativeready`
+이벤트를 함께 들으면 된다.
+
+```ts
+window.addEventListener('nuplexnativeready', () => { /* 브릿지 준비됨 */ })
+```
+
 ```ts
 interface NuplexNative {
   /** 이 계약의 버전. 웹은 이 값으로 기능 지원 여부를 판단한다. */
@@ -32,12 +40,18 @@ interface NuplexNative {
   appVersion: string               // 예: "1.0.0"
   platform: 'ios' | 'android'
 
-  /** Plex 앱 또는 웹으로 이동. 스킴 판단과 폴백은 셸이 처리한다. */
+  /**
+   * Plex 앱 · 스토어 · 브라우저 중 한 곳으로 보낸다. 판단과 폴백은 전부 셸이 한다.
+   *
+   * **`machineIdentifier` 와 `ratingKey` 를 반드시 함께 넘길 것.** 웹이 만드는
+   * `webUrl` 은 우리 서버가 서빙하는 Plex 웹앱 주소라서 Plex 앱이 가로채지 않는다.
+   * 셸은 이 둘로 앱용 주소를 다시 만들고, `webUrl` 은 최후의 폴백으로만 쓴다.
+   */
   openInPlex(params: {
-    webUrl: string                 // https://app.plex.tv/... (필수)
-    machineIdentifier?: string
-    ratingKey?: string
-  }): Promise<{ opened: 'app' | 'browser' }>
+    webUrl: string                 // 웹이 만든 주소 (필수, 폴백용)
+    machineIdentifier?: string     // 없으면 앱 딥링크를 포기한다
+    ratingKey?: string             // 없으면 앱 딥링크를 포기한다
+  }): Promise<{ opened: 'app' | 'browser' | 'store' }>
 
   /** 알림 권한 상태 조회 및 요청 */
   getPushPermission(): Promise<'granted' | 'denied' | 'prompt'>
@@ -153,6 +167,10 @@ const m = ua.match(/NuplexApp \((ios|android); bridge\/(\d+)\)/)
   (거기서 `/profile` 로 이어짐)로 리다이렉트된다. 셸이 푸시 라우트로 진입해도 이
   리다이렉트를 거칠 수 있으므로, 입장 후 원래 목적지로 돌아가는 `?next=` 처리에
   의존한다.
+- **인증 없이 열리는 경로**는 `/welcome` · `/guide` · `/profile` 과 `/api/profile` ·
+  `/api/auth/logout` · `/api/app/config` · `/media/avatars` 다(`nuplex/proxy.ts`).
 - **작품 상세 경로는 `/title/<ratingKey>`** 이다.
-- **Plex 딥링크 포맷은 웹이 이미 만들고 있다** (`lib/plex/client.ts`):
-  `https://app.plex.tv/desktop/#!/server/<machineIdentifier>/details?key=<urlencoded /library/metadata/ratingKey>`
+- **Plex 링크는 웹이 만들지만 앱은 그대로 쓰지 않는다** (`lib/library.ts`):
+  `https://plex.nugabox.com/web/index.html#!/server/<machineIdentifier>/details?key=<urlencoded /library/metadata/ratingKey>`
+  우리 서버 도메인이라 Plex 앱이 가로채지 않는다. 셸이 식별자로 앱용 주소를 다시
+  만든다 — [PLEX_DEEPLINK.md](PLEX_DEEPLINK.md).
