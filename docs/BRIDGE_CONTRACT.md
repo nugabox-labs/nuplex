@@ -46,11 +46,17 @@ interface NuplexNative {
    * **`machineIdentifier` 와 `ratingKey` 를 반드시 함께 넘길 것.** 웹이 만드는
    * `webUrl` 은 우리 서버가 서빙하는 Plex 웹앱 주소라서 Plex 앱이 가로채지 않는다.
    * 셸은 이 둘로 앱용 주소를 다시 만들고, `webUrl` 은 최후의 폴백으로만 쓴다.
+   *
+   * **`type` 도 함께 넘길 것.** Plex 앱의 항목 딥링크는 재생 명령이라, 재생할 파일이
+   * 없는 묶음(`show` · `season` · `collection`)을 주면 오류 팝업이 뜬다. 종류를 알면
+   * 셸이 그런 항목을 웹 폴백으로 보내 상세 화면을 띄운다. 없으면 재생 가능한 항목으로
+   * 보고 진행한다 — 구버전 웹과의 호환. 자세한 근거는 PLEX_DEEPLINK.md.
    */
   openInPlex(params: {
     webUrl: string                 // 웹이 만든 주소 (필수, 폴백용)
     machineIdentifier?: string     // 없으면 앱 딥링크를 포기한다
     ratingKey?: string             // 없으면 앱 딥링크를 포기한다
+    type?: string                  // 'movie' | 'episode' | 'show' | 'season' | 'collection' …
   }): Promise<{ opened: 'app' | 'browser' | 'store' }>
 
   /** 알림 권한 상태 조회 및 요청 */

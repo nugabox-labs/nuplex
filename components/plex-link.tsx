@@ -17,6 +17,7 @@ interface NuplexNative {
     webUrl: string
     machineIdentifier?: string
     ratingKey?: string
+    type?: string
   }): Promise<unknown>
 }
 
@@ -32,10 +33,19 @@ function parseWebUrl(webUrl: string): { server: string; ratingKey: string } | nu
 
 export function PlexLink({
   href,
+  type,
   className,
   children,
 }: {
   href: string
+  /**
+   * Plex 의 항목 종류. 셸이 이걸로 재생할 수 있는 항목인지 가른다.
+   *
+   * 앱 셸이 여는 Plex 딥링크는 **재생 명령**이라, 재생할 파일이 없는 묶음
+   * (`show` · `season`)을 넘기면 Plex 앱이 오류 팝업을 띄운다. 종류를 알려주면
+   * 셸이 그런 항목을 웹으로 돌려 상세 화면을 띄운다(nuplex-app: PLEX_DEEPLINK.md).
+   */
+  type?: string
   className?: string
   children: React.ReactNode
 }) {
@@ -51,6 +61,7 @@ export function PlexLink({
         webUrl: href,
         machineIdentifier: parsed?.server,
         ratingKey: parsed?.ratingKey,
+        type,
       })
       .catch(() => window.open(href, '_blank', 'noopener'))
   }

@@ -101,11 +101,16 @@ iOS 백그라운드에서는 `notification` 만 오면 JS 리스너가 안 불�
 ```ts
 const native = (window as any).NuplexNative
 if (native?.bridgeVersion >= 1) {
-  await native.openInPlex({ webUrl })
+  await native.openInPlex({ webUrl, machineIdentifier, ratingKey, type })
 } else {
   window.open(webUrl, '_blank')   // 브라우저 폴백
 }
 ```
+
+**`openInPlex` 에는 `webUrl` 만 넘기지 않는다.** 우리가 만드는 주소는 우리 Plex
+서버가 서빙하는 웹앱이라 Plex 앱이 가로채지 않는다. 셸이 `machineIdentifier` ·
+`ratingKey` 로 앱용 주소를 다시 만들고, `type` 으로 재생 가능한 항목인지 가른다
+(시리즈를 재생하라고 보내면 Plex 앱이 오류를 띄운다). 호출부는 `components/plex-link.tsx`.
 
 셸의 브릿지 메서드는 **절대 제거하지 않는다.** 웹은 앱 업데이트 없이 바뀌지만
 구버전 셸을 쓰는 사용자는 남아 있다. 새 기능은 `bridgeVersion` 을 올리고 메서드를

@@ -122,6 +122,7 @@ export default async function TitlePage({
 
             <PlexLink
               href={item.plexUrl}
+              type={item.type}
               className="mt-6 inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <Play className="h-5 w-5 fill-current" />

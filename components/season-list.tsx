@@ -42,6 +42,7 @@ export function SeasonList({ seasons }: { seasons: SeasonWithEpisodes[] }) {
             <li key={episode.ratingKey}>
               <PlexLink
                 href={episode.plexUrl}
+                type="episode"
                 className="group flex gap-4 rounded-lg p-3 transition hover:bg-secondary/50"
               >
                 <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-md bg-secondary sm:w-44">
