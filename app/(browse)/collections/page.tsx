@@ -6,9 +6,21 @@ import { groupCollectionsBySection, listCollections } from '@/lib/library'
 export const metadata: Metadata = { title: '시리즈 모음' }
 export const dynamic = 'force-dynamic'
 
+// 이 화면만 순서가 다르다. 모음이 가장 많은 외국 영화를 앞에 세운다 —
+// 상단 메뉴 · 라이브러리 화면의 차례(compareSectionTitles)는 그대로 둔다.
+const SECTION_ORDER = ['영화 | 외국', '영화 | 한국']
+
+function orderIndex(title: string): number {
+  const index = SECTION_ORDER.indexOf(title.trim().replace(/\s*\|\s*/g, ' | '))
+  return index === -1 ? SECTION_ORDER.length : index
+}
+
 export default async function CollectionsPage() {
   const collections = await listCollections()
-  const groups = groupCollectionsBySection(collections)
+  // 목록에 없는 구분은 원래 차례를 지킨다(정렬이 안정적이라 그대로 뒤에 남는다).
+  const groups = groupCollectionsBySection(collections).sort(
+    (a, b) => orderIndex(a.sectionTitle) - orderIndex(b.sectionTitle),
+  )
 
   return (
     <div className="page-top px-4 pb-20 md:px-8">

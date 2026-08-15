@@ -1,7 +1,12 @@
 import { cookies } from 'next/headers'
 import { Navbar } from '@/components/navbar'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
-import { getSections, groupSections } from '@/lib/library'
+import {
+  FIXED_HOME_ROWS,
+  getSections,
+  groupSections,
+  sortSectionsForHome,
+} from '@/lib/library'
 import { getCurrentProfile } from '@/lib/profiles'
 
 // 로그인 화면을 뺀 모든 화면이 쓰는 껍데기.
@@ -22,6 +27,14 @@ export default async function BrowseLayout({
     <div className="min-h-screen bg-background">
       <Navbar
         groups={groupSections(sections)}
+        homeRows={[
+          // 고정 줄이 먼저, 라이브러리 줄이 뒤 — 홈이 그리는 기본 차례와 같아야 한다
+          ...FIXED_HOME_ROWS,
+          ...sortSectionsForHome(sections).map((section) => ({
+            key: `section-${section.id}`,
+            title: section.title,
+          })),
+        ]}
         profile={profile}
         showAdminLink={profile?.isPlexAdmin ?? false}
       />

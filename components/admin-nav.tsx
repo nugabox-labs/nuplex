@@ -4,6 +4,8 @@ import { getLastSync } from '@/lib/library'
 import { formatRelativeTime } from '@/lib/format'
 
 const TABS = [
+  // 스캔이 맨 앞이다. 관리자 화면에 들어오는 가장 잦은 용건이라 첫 화면으로 둔다.
+  { key: 'scan', href: '/admin/scan', label: '스캔' },
   { key: 'notices', href: '/admin/notices', label: '알림' },
   { key: 'featured', href: '/admin/featured', label: '연재' },
   { key: 'profiles', href: '/admin/profiles', label: '프로필' },

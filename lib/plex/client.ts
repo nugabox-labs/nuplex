@@ -414,3 +414,26 @@ export function buildPlexDeepLink(baseUrl: string, serverId: string, ratingKey: 
   const key = encodeURIComponent(`/library/metadata/${ratingKey}`)
   return `${baseUrl.replace(/\/+$/, '')}/web/index.html#!/server/${serverId}/details?key=${key}`
 }
+
+// --- 라이브러리 스캔 ---------------------------------------------------------
+//
+// 관리자 화면의 "스캔" 버튼이 쓴다. 화면을 그릴 때 부르는 게 아니라 관리자가 누를 때만
+// 나가는 호출이라, 화면이 Plex 를 기다리지 않는다는 원칙(AGENTS §2)은 그대로다.
+
+/** 그 라이브러리의 파일을 다시 훑게 한다. Plex 는 즉시 200 을 주고 뒤에서 진행한다. */
+export async function refreshSection(env: PlexEnv, sectionId: number): Promise<void> {
+  await fetchWithRetry('라이브러리 스캔', `${env.baseUrl}/library/sections/${sectionId}/refresh`, {
+    headers: { 'X-Plex-Token': env.token },
+    signal: AbortSignal.timeout(30_000),
+  })
+}
+
+/** 지금 스캔 중인 라이브러리 id 목록. Plex 의 진행 상황을 그대로 읽는다. */
+export async function scanningSectionIds(env: PlexEnv): Promise<number[]> {
+  const container = await plexGet(env, '/activities')
+  const activities: any[] = container?.Activity ?? []
+  return activities
+    .filter((activity) => String(activity?.type ?? '').startsWith('library.update.section'))
+    .map((activity) => Number(activity?.Context?.librarySectionID))
+    .filter((id) => Number.isInteger(id))
+}

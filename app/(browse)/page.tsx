@@ -2,8 +2,8 @@ import { cookies } from 'next/headers'
 import { CollectionRow } from '@/components/collection-row'
 import { ContentRow } from '@/components/content-row'
 import { HeroCarousel } from '@/components/hero-carousel'
-import { HomeRows } from '@/components/home-rows'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
+import { getHomeLayout, type HomeLayout } from '@/lib/profiles'
 import {
   getContinueWatching,
   getFeaturedSeries,
@@ -16,16 +16,27 @@ import {
 // 빌드 시점에는 DB 가 없으므로 미리 렌더할 수도 없다.
 export const dynamic = 'force-dynamic'
 
+/** 저장된 차례를 실제 줄 목록에 입힌다. 목록에 없는 줄은 원래 자리 뒤에 붙는다. */
+function applyRowOrder<T extends { key: string }>(rows: T[], order: string[] | null): T[] {
+  if (!order) return rows
+  const rank = new Map(order.map((key, index) => [key, index]))
+  return rows
+    .map((row, index) => ({ row, rank: rank.get(row.key) ?? order.length + index }))
+    .sort((a, b) => a.rank - b.rank)
+    .map((entry) => entry.row)
+}
+
 export default async function HomePage() {
   // 이어서 보기는 지금 들어와 있는 프로필의 것이다. 프로필이 없으면 줄 자체가 없다.
   const profileId = await readProfileValue((await cookies()).get(PROFILE_COOKIE)?.value)
 
-  const [heroItems, rows, collections, featured, continueWatching] = await Promise.all([
+  const [heroItems, rows, collections, featured, continueWatching, layout] = await Promise.all([
     getHeroItems(10),
     getHomeRows(),
     listShuffledCollections(),
     getFeaturedSeries(),
     profileId ? getContinueWatching(profileId) : [],
+    profileId ? getHomeLayout(profileId) : ({ order: null, hidden: [] } as HomeLayout),
   ])
 
   if (rows.length === 0) {
@@ -40,6 +51,24 @@ export default async function HomePage() {
     )
   }
 
+  // 순서를 바꿀 수 있는 줄들. 기본 차례는 FIXED_HOME_ROWS + 라이브러리 줄 순이다.
+  const [recentRow, ...sectionRows] = rows
+  const orderable = [
+    featured.length > 0
+      ? {
+          key: 'featured',
+          node: (
+            <ContentRow row={{ key: 'featured', title: '현재 연재 중인 시리즈', items: featured }} />
+          ),
+        }
+      : null,
+    { key: 'recent', node: <ContentRow row={recentRow} /> },
+    collections.length > 0
+      ? { key: 'collections', node: <CollectionRow collections={collections} href="/collections" /> }
+      : null,
+    ...sectionRows.map((row) => ({ key: row.key, node: <ContentRow row={row} /> })),
+  ].filter((row) => row !== null)
+
   return (
     <>
       <HeroCarousel items={heroItems} />
@@ -50,25 +79,14 @@ export default async function HomePage() {
           <ContentRow row={{ key: 'continue', title: '이어서 보기', items: continueWatching }} />
         ) : null}
 
-        {/* 관리자가 고른 연재 중인 시리즈. 없으면 줄 자체가 없다 */}
-        {featured.length > 0 ? (
-          <ContentRow row={{ key: 'featured', title: '현재 연재 중인 시리즈', items: featured }} />
-        ) : null}
-
-        {/* 최근 추가 바로 다음에 시리즈 모음을 끼운다. 여기까지가 고정 자리다 */}
-        {rows.slice(0, 1).map((row) => (
-          <ContentRow key={row.key} row={row} />
-        ))}
-        <CollectionRow collections={collections} href="/collections" />
-
-        {/* 라이브러리 줄은 보는 사람이 순서를 바꿀 수 있다 */}
-        <HomeRows
-          rows={rows.slice(1).map((row) => ({
-            key: row.key,
-            title: row.title,
-            node: <ContentRow row={row} />,
-          }))}
-        />
+        {/* 나머지 줄은 프로필에 저장된 차례를 따른다(프로필 메뉴 → 홈 화면 설정).
+            저장 뒤에 생긴 줄은 뒤로 가되 사라지지 않는다. 서버에서 순서를 맞춰
+            내려보내므로 화면이 한 번 그려진 뒤 재배열되는 일이 없다 */}
+        {applyRowOrder(orderable, layout.order)
+          .filter((row) => !layout.hidden.includes(row.key))
+          .map((row) => (
+            <div key={row.key}>{row.node}</div>
+          ))}
       </div>
     </>
   )

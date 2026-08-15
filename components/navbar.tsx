@@ -3,11 +3,20 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ChevronDown, Home, Layers, LogOut, Search, ShieldCheck } from 'lucide-react'
+import {
+  ChevronDown,
+  Home,
+  Layers,
+  LogOut,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LibrarySection } from '@/lib/library'
 import type { Profile } from '@/lib/profiles'
 import { ChatPanel } from './chat-panel'
+import { HomeOrderModal, type OrderableRow } from './home-order-modal'
 import { NoticeBell } from './notice-bell'
 
 // 메뉴 구성은 Plex 의 라이브러리 분류를 그대로 따른다. 우리가 새로 묶지 않는다.
@@ -15,10 +24,13 @@ import { NoticeBell } from './notice-bell'
 
 export function Navbar({
   groups,
+  homeRows,
   profile,
   showAdminLink = false,
 }: {
   groups: { group: string; sections: LibrarySection[] }[]
+  /** 홈 화면 설정 창이 보여줄 줄 목록. 홈과 같은 기본 차례로 온다 */
+  homeRows: OrderableRow[]
   /** 지금 보고 있는 사람. 우측 상단 동그란 버튼이 된다 */
   profile: Profile | null
   /** Plex 서버 소유 계정으로 들어왔을 때만 관리자 진입점을 보여준다 */
@@ -27,6 +39,7 @@ export function Navbar({
   const pathname = usePathname()
   const [openGroup, setOpenGroup] = useState<string | null>(null)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [homeSettingsOpen, setHomeSettingsOpen] = useState(false)
   const navRef = useRef<HTMLDivElement>(null)
   const mobileNavRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -194,9 +207,21 @@ export function Navbar({
                     {profile.name}
                   </p>
                 ) : null}
+                {/* 홈 줄 순서. 홈이 아닌 화면에서도 열 수 있어야 나중에 찾기 쉽다 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false)
+                    setHomeSettingsOpen(true)
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  홈 화면 설정
+                </button>
                 {showAdminLink ? (
                   <Link
-                    href="/admin/notices"
+                    href="/admin/scan"
                     className="flex w-full items-center gap-2 px-4 py-2 text-sm text-primary transition hover:bg-secondary"
                   >
                     <ShieldCheck className="h-4 w-4" />
@@ -287,6 +312,13 @@ export function Navbar({
           </ul>
         ) : null}
       </div>
+
+      {/* 홈 줄 순서 창. 여는 곳이 프로필 메뉴라 상단 바가 들고 있는다 */}
+      <HomeOrderModal
+        rows={homeRows}
+        open={homeSettingsOpen}
+        onClose={() => setHomeSettingsOpen(false)}
+      />
     </header>
   )
 }

@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react'
 // 열람은 프로필 이메일이 관문이라 비밀번호를 쓰지 않는다.
 export function AdminLoginForm({
   endpoint = '/api/admin/login',
-  defaultNext = '/admin/notices',
+  defaultNext = '/admin/scan',
   username = 'ngjang@kakao.com',
 }: {
   endpoint?: string

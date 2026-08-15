@@ -89,8 +89,15 @@ function seasonLabel(title: string, seasonIndex: number | null): string {
 // "Not found" 로 돌려준다(폰 · 데스크탑 양쪽에서 실측). 서버가 직접 서빙하는 웹앱
 // (`<서버>/web/index.html`)은 같은 주소 모양을 그대로 받는다.
 // 주소 문자열을 만들 뿐 Plex 를 호출하지는 않는다 — AGENTS §2 의 경계는 지킨다.
+//
+// **`PLEX_BASE_URL` 을 그대로 쓰면 안 된다.** 운영에서는 그 값이 사설 IP 다
+// (같은 망에서 동기화를 빠르게 하려고). 그걸 링크에 박으면 밖에 있는 사람은
+// 열지 못한다. 링크에는 바깥에서 닿는 주소(`PLEX_PUBLIC_URL`)를 쓴다.
 function plexDeepLink(ratingKey: string): string {
-  const baseUrl = (process.env.PLEX_BASE_URL ?? '').replace(/\/+$/, '')
+  const baseUrl = (process.env.PLEX_PUBLIC_URL || process.env.PLEX_BASE_URL || '').replace(
+    /\/+$/,
+    '',
+  )
   const serverId = process.env.PLEX_SERVER_ID ?? ''
   const key = encodeURIComponent(`/library/metadata/${ratingKey}`)
   return `${baseUrl}/web/index.html#!/server/${serverId}/details?key=${key}`
@@ -378,7 +385,7 @@ const ROW_SIZE = 20
 // 홈에 라이브러리 줄이 나오는 기본 차례. Plex 섹션 제목을 그대로 적는다 —
 // 분류 이름은 우리가 새로 짓지 않는다(AGENTS §2). 여기 없는 섹션은 이 뒤에
 // 원래 순서대로 붙으므로, 섹션이 새로 생겨도 화면에서 사라지지 않는다.
-// 보는 사람이 이 순서를 직접 바꾼 경우는 화면 쪽에서 덮어쓴다(components/home-rows.tsx).
+// 보는 사람이 이 순서를 직접 바꾼 경우는 화면 쪽에서 덮어쓴다(components/home-order-modal.tsx).
 const HOME_SECTION_ORDER = [
   '영화 | 한국',
   '영화 | 외국',
@@ -398,6 +405,26 @@ function homeOrderIndex(title: string): number {
   const normalized = title.trim().replace(/\s*\|\s*/g, ' | ')
   const index = HOME_SECTION_ORDER.indexOf(normalized)
   return index === -1 ? HOME_SECTION_ORDER.length : index
+}
+
+/**
+ * 라이브러리가 아닌 홈 줄들. 순서를 바꿀 수 있는 자리라 키와 이름을 한곳에 모아둔다 —
+ * 홈 화면(app/(browse)/page.tsx)과 설정 창이 같은 목록을 봐야 차례가 어긋나지 않는다.
+ * "이어서 보기" 는 여기 없다. 그 사람 것이라 늘 맨 위에 고정이다.
+ */
+export const FIXED_HOME_ROWS = [
+  { key: 'featured', title: '현재 연재 중인 시리즈' },
+  { key: 'recent', title: '최근 추가' },
+  { key: 'collections', title: '시리즈 모음' },
+]
+
+/**
+ * 홈 줄 차례로 정렬한 섹션 목록.
+ * "홈 화면 설정" 창이 홈과 같은 기본 차례를 보여주려면 이 순서를 받아야 한다 —
+ * 상단 메뉴가 쓰는 차례(compareSectionTitles)와 다르다.
+ */
+export function sortSectionsForHome(sections: LibrarySection[]): LibrarySection[] {
+  return [...sections].sort((a, b) => homeOrderIndex(a.title) - homeOrderIndex(b.title))
 }
 
 export async function getHomeRows(): Promise<LibraryRow[]> {

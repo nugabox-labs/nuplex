@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isSecureRequest } from '@/lib/auth/cookie'
-import { PROFILE_COOKIE, PROFILE_MAX_AGE_SECONDS, createProfileValue } from '@/lib/auth/session'
+import {
+  ADMIN_COOKIE,
+  ADMIN_MAX_AGE_SECONDS,
+  PROFILE_COOKIE,
+  PROFILE_MAX_AGE_SECONDS,
+  createAdminValue,
+  createProfileValue,
+} from '@/lib/auth/session'
 import { getProfile, verifyProfileEmail } from '@/lib/profiles'
 
 export const runtime = 'nodejs'
@@ -70,6 +77,19 @@ export async function POST(request: NextRequest) {
     path: '/',
     maxAge: PROFILE_MAX_AGE_SECONDS,
   })
+
+  // 관리자 프로필은 방금 관리자 비밀번호까지 확인했다. 관리자 화면에서 같은 값을
+  // 또 묻지 않도록 여기서 관리자 쿠키도 함께 발급한다. 유효기간은 12시간 그대로다 —
+  // 관리자 화면은 프로필보다 짧게 잡아둔 판단을 바꾸지 않는다.
+  if (profile.isPlexAdmin) {
+    response.cookies.set(ADMIN_COOKIE, await createAdminValue(), {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isSecureRequest(request),
+      path: '/',
+      maxAge: ADMIN_MAX_AGE_SECONDS,
+    })
+  }
   return response
 }
 

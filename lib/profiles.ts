@@ -209,3 +209,42 @@ export async function updateProfile(
   )
   return { ok: true }
 }
+
+// --- 홈 화면 배치 (프로필별) -------------------------------------------------
+//
+// 브라우저가 아니라 프로필에 붙는다. 폰에서 바꾼 배치가 데스크탑에도 그대로 간다.
+// order — 줄이 나오는 차례. 비어 있으면 서버가 정한 기본 차례를 쓴다.
+// hidden — 숨긴 줄. 라이브러리 줄만 숨길 수 있다.
+
+export interface HomeLayout {
+  order: string[] | null
+  hidden: string[]
+}
+
+export async function getHomeLayout(profileId: number): Promise<HomeLayout> {
+  const row = await queryOne<{ home_row_order: string[] | null; home_hidden_rows: string[] | null }>(
+    `SELECT home_row_order, home_hidden_rows FROM profile WHERE id = $1`,
+    [profileId],
+  )
+  const order = row?.home_row_order
+  return {
+    order: order && order.length > 0 ? order : null,
+    hidden: row?.home_hidden_rows ?? [],
+  }
+}
+
+/** 빈 배열을 주면 기본값(기본 차례 · 숨김 없음)으로 되돌린다. */
+export async function setHomeLayout(
+  profileId: number,
+  layout: { order: string[]; hidden: string[] },
+): Promise<void> {
+  await db.query(
+    `UPDATE profile SET home_row_order = $2, home_hidden_rows = $3, updated_at = now()
+      WHERE id = $1`,
+    [
+      profileId,
+      layout.order.length > 0 ? layout.order : null,
+      layout.hidden.length > 0 ? layout.hidden : null,
+    ],
+  )
+}

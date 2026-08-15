@@ -40,7 +40,7 @@ export async function proxy(request: NextRequest) {
 
     if (matches(pathname, ADMIN_PUBLIC_PATHS)) {
       if (isAdmin && pathname === '/admin/login') {
-        return NextResponse.redirect(new URL('/admin/notices', request.url))
+        return NextResponse.redirect(new URL('/admin/scan', request.url))
       }
       return NextResponse.next()
     }

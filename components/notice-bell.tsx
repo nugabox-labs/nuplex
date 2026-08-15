@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Bell, X } from 'lucide-react'
+import { Bell, ChevronDown, X } from 'lucide-react'
 import { formatRelativeTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 interface Notice {
   id: string
@@ -20,12 +21,15 @@ export function NoticeBell() {
   const [notices, setNotices] = useState<Notice[]>([])
   const [open, setOpen] = useState(false)
   const [unread, setUnread] = useState(0)
+  /** 펼쳐 놓은 알림. 목록이 길어지면 제목만 훑고 필요한 것만 여는 편이 낫다 */
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/notices')
     if (!res.ok) return
     const data = (await res.json()) as { notices: Notice[] }
     setNotices(data.notices)
+    setExpanded(data.notices[0]?.id ?? null)
 
     const lastRead = window.localStorage.getItem(LAST_READ_KEY)
     setUnread(
@@ -110,28 +114,45 @@ export function NoticeBell() {
                   </p>
                 ) : (
                   <ul className="divide-y divide-border/60">
-                    {notices.map((notice, index) => (
-                      <li key={notice.id} className="px-5 py-4">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <h3 className="min-w-0 font-semibold text-foreground">
-                            {/* 맨 위 한 건에만 붙인다. 목록이 길어져도 어디부터 볼지 알 수 있다 */}
-                            {index === 0 ? (
-                              <span className="mr-2 inline-flex shrink-0 items-center rounded-full bg-primary px-2 py-0.5 align-middle text-[11px] font-bold text-primary-foreground">
-                                최신
-                              </span>
-                            ) : null}
-                            {notice.title}
-                          </h3>
-                          <time className="shrink-0 text-xs text-muted-foreground">
-                            {formatRelativeTime(notice.publishedAt)}
-                          </time>
-                        </div>
-                        {/* 카카오톡에 보내던 원문 그대로 — 줄바꿈과 이모지를 보존한다 */}
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
-                          {notice.body}
-                        </p>
-                      </li>
-                    ))}
+                    {notices.map((notice, index) => {
+                      const open = expanded === notice.id
+                      return (
+                        <li key={notice.id}>
+                          <button
+                            type="button"
+                            onClick={() => setExpanded(open ? null : notice.id)}
+                            aria-expanded={open}
+                            className="flex w-full items-baseline gap-3 px-5 py-4 text-left transition hover:bg-secondary/50"
+                          >
+                            <h3 className="min-w-0 flex-1 font-semibold text-foreground">
+                              {/* 맨 위 한 건에만 붙인다. 목록이 길어져도 어디부터 볼지 알 수 있다 */}
+                              {index === 0 ? (
+                                <span className="mr-2 inline-flex shrink-0 items-center rounded-full bg-primary px-2 py-0.5 align-middle text-[11px] font-bold text-primary-foreground">
+                                  최신
+                                </span>
+                              ) : null}
+                              {notice.title}
+                            </h3>
+                            <time className="shrink-0 text-xs text-muted-foreground">
+                              {formatRelativeTime(notice.publishedAt)}
+                            </time>
+                            <ChevronDown
+                              className={cn(
+                                'h-4 w-4 shrink-0 self-center text-muted-foreground transition-transform',
+                                open && 'rotate-180',
+                              )}
+                            />
+                          </button>
+
+                          {/* 카카오톡에 보내던 원문 그대로 — 줄바꿈과 이모지를 보존한다 */}
+                          {open ? (
+                            <p className="whitespace-pre-wrap px-5 pb-4 text-sm leading-relaxed text-foreground/80">
+                              {notice.body}
+                            </p>
+                          ) : null}
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>
