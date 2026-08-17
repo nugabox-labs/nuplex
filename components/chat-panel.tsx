@@ -140,7 +140,7 @@ export function ChatPanel({ adminSelf = false }: { adminSelf?: boolean }) {
             role="dialog"
             aria-modal="true"
             aria-label="채팅"
-            className="fixed inset-0 z-[70] flex items-start justify-center bg-background/80 p-4 backdrop-blur-md md:p-10"
+            className="fixed inset-0 z-[70] flex items-start justify-center bg-background/80 p-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur-md md:p-10 md:pt-[calc(env(safe-area-inset-top)+2.5rem)] md:pb-[calc(env(safe-area-inset-bottom)+2.5rem)]"
           >
             <motion.div
               initial={{ opacity: 0, y: -20, scale: 0.98 }}
