@@ -24,6 +24,18 @@ export interface LibraryItem {
   genres: string[]
   /** "Plex에서 보기" 딥링크. 서버에서 만들어 내려보낸다 — 클라이언트가 서버 id 를 알 필요가 없다. */
   plexUrl: string
+  /**
+   * 앱 셸이 Plex 앱으로 보낼 대상. **시리즈는 첫 화를 가리킨다.**
+   *
+   * Plex 앱의 딥링크는 `plex://watch/video` 하나뿐이고 그건 재생 명령이다. 시리즈를
+   * 그대로 넘기면 재생 대기열을 못 만들어 실패하므로, 예전에는 셸이 시리즈를 웹으로
+   * 돌렸다 — 영화만 앱에서 열리고 시리즈는 브라우저로 새는 이유였다.
+   * 상세 페이지를 여는 딥링크는 Plex 에 없다(APK 의 등록 문자열이 둘뿐이다).
+   * 그래서 "그 작품" 대신 **그 작품의 볼 수 있는 화**로 보낸다.
+   */
+  playUrl: string
+  /** `playUrl` 이 가리키는 것의 종류. 시리즈면 `episode` 가 된다. */
+  playType: string
   /** 카드 아래에 한 줄 덧붙일 말. "이어서 보기" 줄에서만 채운다 */
   badge?: string
 }
@@ -69,6 +81,8 @@ interface ItemRow {
   poster_file: string | null
   backdrop_file: string | null
   genres: string[] | null
+  /** 시리즈일 때만 채워진다. ITEM_SELECT 의 곁가지 조회 결과 */
+  first_episode_rating_key?: string | null
 }
 
 function mediaUrl(file: string | null): string | null {
@@ -123,6 +137,8 @@ function toItem(row: ItemRow): LibraryItem {
     backdrop: mediaUrl(row.backdrop_file),
     genres: row.genres?.filter(Boolean) ?? [],
     plexUrl: plexDeepLink(row.rating_key),
+    playUrl: plexDeepLink(row.first_episode_rating_key ?? row.rating_key),
+    playType: row.first_episode_rating_key ? 'episode' : row.type,
   }
 }
 
@@ -136,7 +152,19 @@ const ITEM_SELECT = `
              JOIN genre g ON g.id = mg.genre_id
             WHERE mg.rating_key = m.rating_key
             ORDER BY mg.sort_order
-         ) AS genres
+         ) AS genres,
+         -- 시리즈를 Plex 앱으로 보낼 때 쓸 첫 화. 시리즈가 아니면 NULL 이다.
+         -- 스페셜(시즌 0)은 뒤로 미룬다 — 처음 보는 사람에게 보여줄 화가 아니다.
+         (
+           SELECT e.rating_key
+             FROM episode e
+            WHERE e.show_rating_key = m.rating_key
+              AND e.deleted_at IS NULL
+              AND e.season_index IS NOT NULL
+              AND e.episode_index IS NOT NULL
+            ORDER BY (e.season_index = 0), e.season_index, e.episode_index
+            LIMIT 1
+         ) AS first_episode_rating_key
     FROM media_item m
 `
 
