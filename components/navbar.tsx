@@ -87,10 +87,11 @@ export function Navbar({
     <header className="fixed inset-x-0 top-0 z-50 pt-[env(safe-area-inset-top)]">
       {/* 뒤로 화면이 비쳐도 메뉴 글씨가 읽히도록 검은 막을 한 겹 깐다. 스크롤해도
           모양이 바뀌지 않는다 — 유리(블러) + 아래 테두리로 바꾸면 상단 바가 화면에서
-          잘려 보인다. 막은 상단 바보다 내려와 끝에서 서서히 사라져 경계가 없다. */}
+          잘려 보인다. 막은 상단 바보다 내려와 끝에서 서서히 사라져 경계가 없다.
+          정지점은 `.header-scrim`(app/globals.css)에 있다. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[130%] bg-gradient-to-b from-background via-background/85 to-transparent"
+        className="header-scrim pointer-events-none absolute inset-x-0 top-0 h-[150%]"
       />
 
       <div className="relative flex h-16 items-center gap-3 px-4 md:px-8">
@@ -249,9 +250,14 @@ export function Navbar({
       {/* 좁은 화면 — 구분만 늘어놓고, 하위 분류는 눌러서 아래로 편다.
           전부 펼쳐두면 줄이 화면 몇 배로 길어져 무엇이 있는지 한눈에 안 들어온다. */}
       <div ref={mobileNavRef} className="relative lg:hidden">
-        <nav className="no-scrollbar flex items-center gap-1 overflow-x-auto px-4 pb-2">
-          <NavLink href="/" active={pathname === '/'} icon={Home} label="홈" />
-          <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+        {/* 홈은 스크롤 밖에 고정한다. 안에 두면 분류를 옆으로 넘길 때 같이 밀려나가
+            돌아올 길이 사라진다. 분류만 가로로 넘긴다. */}
+        <div className="flex items-stretch pb-2 pl-4">
+          <div className="flex shrink-0 items-center gap-1">
+            <NavLink href="/" active={pathname === '/'} icon={Home} label="홈" />
+            <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+          </div>
+          <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-4">
           {groups.map((group) =>
             group.sections.length === 1 ? (
               <NavLink
@@ -292,7 +298,8 @@ export function Navbar({
             icon={Layers}
             label="시리즈"
           />
-        </nav>
+          </nav>
+        </div>
 
         {openSections.length > 1 ? (
           <ul className="grid grid-cols-2 gap-1 border-t border-border bg-popover/95 px-4 py-2 shadow-2xl backdrop-blur-md">

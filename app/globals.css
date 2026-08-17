@@ -108,12 +108,33 @@
   /* 고정 상단 바 아래로 내용을 밀어내는 공통 여백. 좁은 화면의 상단 바는
      로고 줄 + 분류 줄 두 층(약 104px)이라 더 준다. 화면마다 숫자를 따로 쓰면
      금방 어긋난다 — 목록 화면은 전부 이 클래스를 쓴다. */
+  /* 상단 바 뒤에 까는 검은 막.
+
+     위 70% 는 **완전히 불투명**하게 두고 아래 30% 에서만 사라진다. 예전에는 가운데를
+     85% 로 두고 곧장 옅어지게 했는데, 홈 히어로처럼 밝은 그림 위에서 메뉴 글씨와
+     그림이 겹쳐 보였다. 페이드는 바 아래에서만 일어나면 된다.
+
+     Tailwind 의 `via-background/70` · `from-70%` 로는 안 된다 — 알파가 버려지고
+     위치 정지점 유틸리티가 아예 생성되지 않는 것을 빌드 산출물에서 확인했다.
+     그래서 여기에 직접 쓴다. 색은 토큰을 그대로 쓰고 알파 계산을 피하려고
+     불투명 층과 페이드 층을 겹쳐 놓는다. */
+  .header-scrim {
+    background:
+      linear-gradient(to bottom, var(--background) 0%, transparent 100%) bottom / 100% 30%
+        no-repeat,
+      linear-gradient(var(--background), var(--background)) top / 100% 70% no-repeat;
+  }
+
+  /* 상단 바가 fixed 라, 히어로가 없는 화면은 그 높이만큼 스스로 비워야 한다.
+     앱 셸에서는 상단 바가 안전영역만큼 더 내려와 있으므로(components/navbar.tsx)
+     그 값을 여기서도 더해 준다. 빼먹으면 아이폰에서 제목이 분류 줄에 깔린다.
+     브라우저에서는 inset 이 0 이라 예전과 같다. */
   .page-top {
-    padding-top: 8.5rem;
+    padding-top: calc(8.5rem + env(safe-area-inset-top));
   }
   @media (min-width: 1024px) {
     .page-top {
-      padding-top: 7rem;
+      padding-top: calc(7rem + env(safe-area-inset-top));
     }
   }
   .no-scrollbar {
