@@ -19,6 +19,8 @@ import { ADMIN_COOKIE, PROFILE_COOKIE, readProfileValue, verifyAdminValue } from
 const PUBLIC_PATHS = [
   '/welcome',
   '/guide',
+  // 스토어가 로그인 없이 열리는 주소를 요구한다. 관문 뒤에 두면 심사자가 못 본다.
+  '/privacy',
   '/profile',
   '/api/profile',
   '/api/auth/logout',
