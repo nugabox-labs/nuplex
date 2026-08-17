@@ -80,7 +80,11 @@ export function Navbar({
   }
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50">
+    // pt-[env(...)] 는 앱 셸에서만 값이 생긴다. 웹뷰가 viewport-fit=cover 로 노치
+    // 아래까지 그리므로(app/layout.tsx), 이 여백이 없으면 로고와 오른쪽 아이콘들이
+    // 상태바에 깔린다. 겹쳐 보이는 것으로 끝나지 않고 iOS 상태바가 탭을 먼저 먹어
+    // 채팅·알림 버튼이 아예 안 눌린다. 브라우저에서는 inset 이 0 이라 그대로다.
+    <header className="fixed inset-x-0 top-0 z-50 pt-[env(safe-area-inset-top)]">
       {/* 뒤로 화면이 비쳐도 메뉴 글씨가 읽히도록 검은 막을 한 겹 깐다. 스크롤해도
           모양이 바뀌지 않는다 — 유리(블러) + 아래 테두리로 바꾸면 상단 바가 화면에서
           잘려 보인다. 막은 상단 바보다 내려와 끝에서 서서히 사라져 경계가 없다. */}
