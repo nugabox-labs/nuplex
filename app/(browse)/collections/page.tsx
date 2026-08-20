@@ -31,7 +31,7 @@ export default async function CollectionsPage() {
         </span>
       </h1>
       <p className="mb-10 text-sm text-muted-foreground">
-        Plex 라이브러리에 직접 묶어둔 모음입니다.
+        장르별 시리즈 및 컬렉션 모음입니다.
       </p>
 
       {groups.length === 0 ? (

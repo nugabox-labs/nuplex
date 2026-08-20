@@ -91,7 +91,7 @@ export function Navbar({
           정지점은 `.header-scrim`(app/globals.css)에 있다. */}
       <div
         aria-hidden
-        className="header-scrim pointer-events-none absolute inset-x-0 top-0 h-[150%]"
+        className="header-scrim pointer-events-none absolute inset-x-0 top-0 h-[calc(100%+1.5rem)]"
       />
 
       <div className="relative flex h-16 items-center gap-3 px-4 md:px-8">

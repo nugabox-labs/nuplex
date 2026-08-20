@@ -118,11 +118,18 @@
      위치 정지점 유틸리티가 아예 생성되지 않는 것을 빌드 산출물에서 확인했다.
      그래서 여기에 직접 쓴다. 색은 토큰을 그대로 쓰고 알파 계산을 피하려고
      불투명 층과 페이드 층을 겹쳐 놓는다. */
+  /* 검은 막은 **상단 바 높이만큼만** 꽉 차고, 그 아래 1.5rem 에서만 사라진다.
+     예전에는 높이를 150%로 두고 아래 30%를 페이드로 썼는데, 상단 바가 안전영역만큼
+     길어지는 앱에서는 그 150%가 같이 늘어나 **제목까지 덮었다.** 화면 제목이
+     회색으로 죽어 보이던 원인이다. 높이를 헤더에 고정하고 페이드만 고정값으로
+     떼어 내면 기기와 무관하게 같은 자리에서 끝난다.
+     높이 자체는 navbar.tsx 의 h-[calc(100%+1.5rem)] 과 짝이다 — 같이 고칠 것. */
   .header-scrim {
     background:
-      linear-gradient(to bottom, var(--background) 0%, transparent 100%) bottom / 100% 30%
+      linear-gradient(to bottom, var(--background) 0%, transparent 100%) bottom / 100% 1.5rem
         no-repeat,
-      linear-gradient(var(--background), var(--background)) top / 100% 70% no-repeat;
+      linear-gradient(var(--background), var(--background)) top / 100% calc(100% - 1.5rem)
+        no-repeat;
   }
 
   /* 상단 바가 fixed 라, 히어로가 없는 화면은 그 높이만큼 스스로 비워야 한다.
@@ -130,7 +137,7 @@
      그 값을 여기서도 더해 준다. 빼먹으면 아이폰에서 제목이 분류 줄에 깔린다.
      브라우저에서는 inset 이 0 이라 예전과 같다. */
   .page-top {
-    padding-top: calc(8.5rem + env(safe-area-inset-top));
+    padding-top: calc(9.5rem + env(safe-area-inset-top));
   }
   @media (min-width: 1024px) {
     .page-top {

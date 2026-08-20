@@ -5,7 +5,7 @@ import { ExternalLink } from 'lucide-react'
 import type { SeasonWithEpisodes } from '@/lib/library'
 import { formatDuration, metaLine } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { PlexLink } from './plex-link'
+import { WatchMenu } from './watch-menu'
 
 export function SeasonList({ seasons }: { seasons: SeasonWithEpisodes[] }) {
   const [selected, setSelected] = useState(0)
@@ -40,7 +40,7 @@ export function SeasonList({ seasons }: { seasons: SeasonWithEpisodes[] }) {
         <ul className="divide-y divide-border/60">
           {season.episodes.map((episode) => (
             <li key={episode.ratingKey}>
-              <PlexLink
+              <WatchMenu
                 href={episode.plexUrl}
                 type="episode"
                 className="group flex gap-4 rounded-lg p-3 transition hover:bg-secondary/50"
@@ -74,7 +74,7 @@ export function SeasonList({ seasons }: { seasons: SeasonWithEpisodes[] }) {
                     </p>
                   ) : null}
                 </div>
-              </PlexLink>
+              </WatchMenu>
             </li>
           ))}
         </ul>
