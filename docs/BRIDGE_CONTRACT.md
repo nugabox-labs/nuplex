@@ -6,7 +6,7 @@
 > - 원본: `nuplex-app/docs/BRIDGE_CONTRACT.md`
 > - 사본: `nuplex/docs/BRIDGE_CONTRACT.md`
 >
-> 계약 버전: **1**
+> 계약 버전: **2**
 
 ## 왜 계약이 필요한가
 
@@ -35,7 +35,7 @@ window.addEventListener('nuplexnativeready', () => { /* 브릿지 준비됨 */ }
 ```ts
 interface NuplexNative {
   /** 이 계약의 버전. 웹은 이 값으로 기능 지원 여부를 판단한다. */
-  bridgeVersion: number            // 현재 1
+  bridgeVersion: number            // 현재 2
   /** 셸 앱 버전 (semver) */
   appVersion: string               // 예: "1.0.0"
   platform: 'ios' | 'android'
@@ -69,6 +69,55 @@ interface NuplexNative {
   /** 로그아웃 시 호출 — 서버 등록 해제 + 로컬 캐시 삭제 */
   clearPushRegistration(): Promise<void>
 
+  /**
+   * **[v2]** 후보 중 지금 닿는 플레이어만 골라 돌려준다.
+   *
+   * 후보 목록은 **웹이 만들어 넘긴다** — 셸은 plex.tv 를 부르지 않는다. 계정 토큰을
+   * 셸에 두지 않기 위함이다. 셸이 하는 일은 각 후보에 실제로 붙어 보고 살아 있는
+   * 것만 남기는 것이다.
+   *
+   * **같은 WiFi 에 있을 때만 결과가 나온다.** Plex 플레이어는 사설 IP 하나만 광고하고
+   * relay 주소가 없어서 밖에서는 원리적으로 닿지 않는다. 빈 배열이면 "TV에서 시청"
+   * 항목을 감추면 된다 — 별도 분기가 필요 없다.
+   */
+  listCastTargets(params: {
+    candidates: { id: string; name: string; uri: string }[]
+    token: string
+  }): Promise<{ targets: { id: string; name: string; uri: string }[] }>
+
+  /**
+   * **[v2]** 플레이어에 재생을 시킨다.
+   *
+   * `targetId` 는 **listCastTargets 가 돌려준 값**을 그대로 쓸 것. 후보로 넣은 id 와
+   * 다를 수 있다 — 플레이어가 스스로 보고하는 값이 진짜다.
+   *
+   * 실패 이유 중 `rejected` 는 대개 **TV 에서 Plex 앱이 꺼져 있는 것**이다.
+   * Companion 서버가 그 앱 프로세스 안에 있어 앱이 떠 있어야만 명령을 받는다.
+   * 웹은 이 경우 "TV 에서 Plex 를 먼저 켜세요" 를 안내한다.
+   */
+  castToTarget(params: {
+    targetId: string
+    uri: string
+    token: string
+    serverAddress: string
+    serverPort: number
+    serverProtocol: 'http' | 'https'
+    machineIdentifier: string
+    ratingKey: string
+    offset?: number
+  }): Promise<{ ok: boolean; error?: string; status?: number; detail?: string }>
+
+  /**
+   * **[v2]** 시스템 화면 공유 피커를 연다.
+   *
+   * **플랫폼마다 다른 물건이고 둘 다 한계가 뚜렷하다. "TV로 쏘기" 의 대체재가 아니다.**
+   * - iOS: AirPlay 피커. 앱이 네이티브로 재생 중인 것이 없으면 골라도 아무 일이
+   *   일어나지 않는다. 화면 미러링은 제어 센터 전용이라 앱이 시작시킬 수 없다.
+   * - Android: 시스템 캐스트 설정 패널. 목록은 Google Cast 계열이라
+   *   **Apple TV 는 뜨지 않는다.**
+   */
+  openRoutePicker(): Promise<{ shown: boolean }>
+
   /** 외부 링크를 시스템 브라우저로 연다 */
   openExternal(url: string): Promise<void>
 
@@ -100,8 +149,8 @@ if (native && native.bridgeVersion >= 1) {
 서버사이드에서도 앱 여부를 알 수 있도록 UA 에 접미사가 붙는다.
 
 ```
-<기본 UA> NuplexApp (ios; bridge/1)
-<기본 UA> NuplexApp (android; bridge/1)
+<기본 UA> NuplexApp (ios; bridge/2)
+<기본 UA> NuplexApp (android; bridge/2)
 ```
 
 Capacitor 8 에서 공백 처리 동작이 바뀐 이력이 있다.
@@ -180,3 +229,15 @@ const m = ua.match(/NuplexApp \((ios|android); bridge\/(\d+)\)/)
   `https://plex.nugabox.com/web/index.html#!/server/<machineIdentifier>/details?key=<urlencoded /library/metadata/ratingKey>`
   우리 서버 도메인이라 Plex 앱이 가로채지 않는다. 셸이 식별자로 앱용 주소를 다시
   만든다 — [PLEX_DEEPLINK.md](PLEX_DEEPLINK.md).
+
+## 7. TV 캐스트 (v2) — 웹이 알아야 할 것
+
+자세한 근거는 [PLEX_CAST.md](PLEX_CAST.md). 웹 구현에 직접 걸리는 것만 적는다.
+
+1. **후보 목록은 웹이 만든다.** `plex.tv/api/resources` 를 서버에서 호출해
+   `provides` 에 `player` 가 있는 기기를 고른다. 토큰은 서버에 둔다.
+2. **후보의 연결 주소는 사설 IP 다.** 그대로 셸에 넘기면 셸이 도달 확인을 한다.
+3. **목록이 비면 "TV에서 시청" 을 감춘다.** 밖에 있을 때가 대부분이라 정상 상황이다.
+4. **`plex.tv` 기기 목록은 Plex 계정 단위다.** NUPLEX 프로필과는 무관하다.
+   프로필마다 다른 TV 를 대상으로 하려면 프로필 ↔ Plex 계정 연결이 먼저 필요하다.
+5. **브라우저에서는 전부 없는 것으로 동작해야 한다.** `bridgeVersion >= 2` 를 확인할 것.

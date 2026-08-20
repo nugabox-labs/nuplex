@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Play, Star } from 'lucide-react'
 import { ContentRow } from '@/components/content-row'
-import { PlexLink } from '@/components/plex-link'
+import { WatchMenu } from '@/components/watch-menu'
 import { SeasonList } from '@/components/season-list'
 import {
   getCollectionItems,
@@ -100,14 +100,14 @@ export default async function TitlePage({
 
             {/* 시청하기는 줄거리 위에 둔다. 아래에 두면 긴 줄거리에 밀려 첫 화면에서
                 보이지 않아, 들어오자마자 누를 것을 찾지 못한다. */}
-            <PlexLink
+            <WatchMenu
               href={item.playUrl}
               type={item.playType}
               className="mt-5 inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <Play className="h-5 w-5 fill-current" />
-              Plex에서 시청하기
-            </PlexLink>
+              시청하기
+            </WatchMenu>
 
             {item.tagline ? (
               <p className="mt-4 text-sm italic text-foreground/70">{item.tagline}</p>
