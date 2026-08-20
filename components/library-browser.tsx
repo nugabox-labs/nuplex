@@ -42,12 +42,9 @@ export async function LibraryBrowser({
 
   return (
     <div className="page-top pb-20">
-      {collections.length > 0 ? (
-        <div className="mb-8">
-          <CollectionRow collections={collections} />
-        </div>
-      ) : null}
-
+      {/* 제목이 맨 먼저다. 컬렉션이 있는 분류만 시리즈 모음 줄이 위에 붙어
+          제목이 아래로 밀려 있었다 — 같은 분류인데 화면마다 첫 줄이 달라진다.
+          시리즈 모음은 제목 아래, 작품 그리드 위에 둔다. */}
       <div className="px-4 md:px-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-2xl font-bold text-foreground md:text-3xl">
@@ -71,6 +68,12 @@ export async function LibraryBrowser({
           ))}
         </div>
       </div>
+
+      {collections.length > 0 ? (
+        <div className="mb-8 -mx-4 md:-mx-8">
+          <CollectionRow collections={collections} />
+        </div>
+      ) : null}
 
       {items.length === 0 ? (
         <p className="py-20 text-center text-sm text-muted-foreground">작품이 없습니다.</p>
