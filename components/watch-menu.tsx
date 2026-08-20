@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Cast, ExternalLink, Loader2, MonitorSmartphone, Play, X } from 'lucide-react'
+import { Cast, ExternalLink, Loader2, MonitorSmartphone, Play, RotateCcw, X } from 'lucide-react'
 
 // "시청하기" 를 눌렀을 때 어디서 볼지 고르는 모달.
 //
@@ -45,6 +45,47 @@ interface NuplexNative {
   openRoutePicker?(): Promise<{ shown: boolean }>
 }
 
+// Plex 로 넘긴 사실을 기록해 둔다.
+//
+// Plex 앱이 **꺼져 있다가 딥링크를 받으면 첫 시도가 실패한다.** 아직 미디어 서버에
+// 연결되기 전이라 재생 대기열을 만들지 못해서다 — 두 번째부터는 된다. 원인이
+// Plex 클라이언트에 있어 우리가 고칠 수 없다는 것까지 확인했다
+// (nuplex-app/docs/PLEX_DEEPLINK.md "첫 실행 때 뜨는 Can't Reach Server").
+//
+// 고치지 못하는 대신, 돌아왔을 때 두 번째 시도를 한 번의 탭으로 줄인다.
+//
+// **재생이 잘 됐는지 우리는 알 수 없다.** OS 가 알려주지 않는다. 그래서 단정하지 않고
+// 물어보는 문구를 쓰고, 잠시 뒤 스스로 사라지게 한다 — 정상적으로 보고 돌아온
+// 사람에게 "다시 시도하세요" 라고 들이대지 않기 위해서다.
+const HANDOFF_KEY = 'nuplex.plexHandoff'
+const HANDOFF_WINDOW_MS = 60_000
+
+function markHandoff(href: string) {
+  try {
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ at: Date.now(), href }))
+  } catch {
+    // 사파리 프라이빗 모드 등에서 막힐 수 있다. 배너가 안 뜰 뿐이다.
+  }
+}
+
+/** 이 href 로 넘긴 기록이 아직 유효하면 소비하고 true 를 돌려준다. */
+function consumeHandoff(href: string): boolean {
+  try {
+    const raw = sessionStorage.getItem(HANDOFF_KEY)
+    if (!raw) return false
+    const saved = JSON.parse(raw) as { at?: number; href?: string }
+    if (saved.href !== href) return false
+    if (!saved.at || Date.now() - saved.at > HANDOFF_WINDOW_MS) {
+      sessionStorage.removeItem(HANDOFF_KEY)
+      return false
+    }
+    sessionStorage.removeItem(HANDOFF_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function nativeBridge(): NuplexNative | null {
   if (typeof window === 'undefined') return null
   const native = (window as unknown as { NuplexNative?: NuplexNative }).NuplexNative
@@ -84,11 +125,48 @@ export function WatchMenu({
   children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
+  const [askRetry, setAskRetry] = useState(false)
 
   function onClick(event: React.MouseEvent<HTMLAnchorElement>) {
     if (!nativeBridge()) return // 브라우저 — 링크를 그대로 따라간다
     event.preventDefault()
     setOpen(true)
+  }
+
+  // Plex 로 넘겼다가 돌아온 참이면 물어본다. 앱 전환에서 돌아올 때 웹뷰가
+  // visibilitychange 를 준다.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== 'visible') return
+      if (consumeHandoff(href)) setAskRetry(true)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    // 돌아오는 순간을 놓친 경우(이벤트가 늦게 붙는 등)를 위해 한 번 더 본다.
+    onVisible()
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [href])
+
+  // 스스로 사라진다. 정상적으로 보고 돌아온 사람에게 계속 남아 있으면 안 된다.
+  useEffect(() => {
+    if (!askRetry) return
+    const timer = setTimeout(() => setAskRetry(false), 8000)
+    return () => clearTimeout(timer)
+  }, [askRetry])
+
+  async function retry() {
+    const native = nativeBridge()
+    setAskRetry(false)
+    if (!native) return
+    const parsed = parseWebUrl(href)
+    markHandoff(href)
+    await native
+      .openInPlex({
+        webUrl: href,
+        machineIdentifier: parsed?.server,
+        ratingKey: parsed?.ratingKey,
+        type,
+      })
+      .catch(() => undefined)
   }
 
   return (
@@ -103,7 +181,42 @@ export function WatchMenu({
         {children}
       </a>
       {open ? <WatchSheet href={href} type={type} onClose={() => setOpen(false)} /> : null}
+      {askRetry && !open ? (
+        <RetryBanner onRetry={retry} onDismiss={() => setAskRetry(false)} />
+      ) : null}
     </>
+  )
+}
+
+/**
+ * "열리지 않았나요?" 배너.
+ *
+ * **단정하지 않는다.** 재생이 됐는지 우리는 알 수 없어서, 잘 보고 돌아온 사람에게도
+ * 뜬다. 그래서 묻는 문구를 쓰고 잠시 뒤 스스로 사라진다.
+ */
+function RetryBanner({ onRetry, onDismiss }: { onRetry: () => void; onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+      <div className="flex w-full max-w-md items-center gap-3 rounded-xl border border-border bg-card/95 px-4 py-3 shadow-2xl backdrop-blur">
+        <p className="min-w-0 flex-1 text-sm text-foreground/85">Plex에서 열리지 않았나요?</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition hover:brightness-110"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          다시 시도
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="닫기"
+          className="shrink-0 rounded-full p-1 text-foreground/50 transition hover:bg-foreground/10 hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -177,6 +290,7 @@ function WatchSheet({
     if (!native) return
     setBusy('app')
     try {
+      markHandoff(href)
       await native.openInPlex({
         webUrl: href,
         machineIdentifier: parsed?.server,
