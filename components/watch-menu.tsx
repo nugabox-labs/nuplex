@@ -229,6 +229,9 @@ function WatchSheet({
   type?: string
   onClose: () => void
 }) {
+  // 'menu' 에서 고르고, Plex 앱을 고르면 'plex-confirm' 으로 한 단계 더 간다.
+  // 콜드 스타트 오류를 없앨 수 없으니, 최소한 놀라지는 않게 미리 알려 준다.
+  const [step, setStep] = useState<'menu' | 'plex-confirm'>('menu')
   const [config, setConfig] = useState<CastConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
@@ -361,7 +364,9 @@ function WatchSheet({
         aria-label="어디서 볼지 고르기"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold">어디서 볼까요?</h2>
+          <h2 className="text-base font-bold">
+            {step === 'plex-confirm' ? '시청하기 전에' : '어디서 볼까요?'}
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -372,13 +377,33 @@ function WatchSheet({
           </button>
         </div>
 
+        {step === 'plex-confirm' ? (
+          <div className="mt-4">
+            <p className="text-pretty text-sm leading-relaxed text-foreground/80">
+              Plex 앱이 실행되어 있지 않은 경우에 에러가 발생할 수 있어요. 그럴 땐 돌아와서
+              다시 이 버튼을 눌러주세요 😄
+            </p>
+            <button
+              type="button"
+              onClick={openInPlexApp}
+              disabled={busy === 'app'}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+            >
+              {busy === 'app' ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Play className="h-5 w-5 fill-current" />
+              )}
+              시청하기
+            </button>
+          </div>
+        ) : (
         <div className="mt-4 space-y-2">
           <Row
             icon={<Play className="h-5 w-5" />}
             label="Plex 앱으로 시청"
             hint="이 기기의 Plex 앱에서 재생합니다"
-            busy={busy === 'app'}
-            onClick={openInPlexApp}
+            onClick={() => setStep('plex-confirm')}
           />
 
           {config?.targets.map((target) => (
@@ -422,6 +447,7 @@ function WatchSheet({
             }}
           />
         </div>
+        )}
 
         {message ? (
           <p className="mt-4 rounded-lg bg-foreground/5 px-3 py-2 text-xs leading-relaxed text-foreground/70">
