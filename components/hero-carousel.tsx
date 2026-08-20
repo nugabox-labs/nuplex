@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
-import { ChevronLeft, ChevronRight, Info, Play, Star } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Play, Star } from 'lucide-react'
 import type { LibraryItem } from '@/lib/library'
 import { formatLength, formatRating, metaLine, typeLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { PlexLink } from './plex-link'
+import { WatchMenu } from './watch-menu'
 
 // 최근 추가된 작품을 배경째로 넘겨 보여준다.
 // 자동으로 넘어가되, 사람이 직접 넘기면 그때부터 멈춘다 — 읽는 중에 화면이
@@ -139,19 +139,20 @@ export function HeroCarousel({ items }: { items: LibraryItem[] }) {
             ) : null}
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <PlexLink
+              <WatchMenu
                 href={item.playUrl}
                 type={item.playType}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-3 text-sm font-bold text-primary-foreground shadow-lg shadow-primary/25 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <Play className="h-5 w-5 fill-current" />
-                Plex에서 시청하기
-              </PlexLink>
+                시청하기
+              </WatchMenu>
+              {/* 아이콘 없이 글자만 둔다. 왼쪽 시청하기 버튼과 무게를 다르게 주어
+                  둘 중 어느 것이 주된 행동인지 한눈에 갈리게 한다. */}
               <Link
                 href={`/title/${item.ratingKey}`}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary/60 px-6 py-3 text-sm font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex items-center rounded-md border border-border bg-secondary/60 px-6 py-3 text-sm font-semibold text-foreground backdrop-blur-sm transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <Info className="h-5 w-5" />
                 상세 정보
               </Link>
             </div>
