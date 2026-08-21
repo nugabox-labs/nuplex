@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { CollectionRow } from '@/components/collection-row'
 import { MovieCard } from '@/components/movie-card'
 import { SectionTitle } from '@/components/section-title'
-import { listCollections, listItems, type SortKey } from '@/lib/library'
+import { listItems, listShuffledCollections, type SortKey } from '@/lib/library'
 
 // 영화 · 시리즈 목록 화면. 두 페이지가 정렬 · 페이지네이션까지 똑같이 쓰므로 하나로 둔다.
 
@@ -36,7 +36,8 @@ export async function LibraryBrowser({
   const [{ items, total }, collections] = await Promise.all([
     listItems({ sectionId, sort, page, pageSize: PAGE_SIZE }),
     // 컬렉션 띠는 첫 페이지에만 보여준다. 2페이지부터도 계속 나오면 거슬린다.
-    page === 1 ? listCollections(sectionId) : Promise.resolve([]),
+    // 홈과 마찬가지로 들어올 때마다 섞는다 — 뒤쪽 모음도 눈에 걸리게.
+    page === 1 ? listShuffledCollections(sectionId) : Promise.resolve([]),
   ])
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
 

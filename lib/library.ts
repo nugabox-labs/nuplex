@@ -321,15 +321,18 @@ export async function listCollections(sectionId?: number): Promise<Collection[]>
 }
 
 /**
- * 홈 줄에 쓰는 시리즈 모음. 구분을 따지지 않고 통째로 섞는다 — 구분 순으로 두면
- * 앞쪽 라이브러리의 모음만 계속 보이고 뒤쪽은 영영 안 보인다.
- * 구분별로 나눠 보는 자리는 라이브러리 화면과 /collections 이다.
+ * 가로 줄에 쓰는 시리즈 모음. 들어올 때마다 섞는다 — 이름순으로 두면 앞쪽 몇 개만
+ * 계속 보이고 뒤는 영영 안 보인다. 홈은 구분을 따지지 않고 통째로 섞고,
+ * 분류 화면은 sectionId 로 그 구분 안에서만 섞는다.
+ * 차례가 고정돼야 하는 자리는 /collections 목록이다.
  */
-export async function listShuffledCollections(): Promise<Collection[]> {
+export async function listShuffledCollections(sectionId?: number): Promise<Collection[]> {
   const rows = await query<CollectionRow>(
     `${COLLECTION_SELECT}
       WHERE c.deleted_at IS NULL
+        ${sectionId ? 'AND c.section_id = $1' : ''}
       ORDER BY random()`,
+    sectionId ? [sectionId] : [],
   )
   return rows.filter((row) => Number(row.count) > 0).map(toCollection)
 }
