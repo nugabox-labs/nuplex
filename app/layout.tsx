@@ -36,13 +36,13 @@ export const metadata: Metadata = {
     title: 'NUPLEX — 나만의 OTT',
     description: DESCRIPTION,
     locale: 'ko_KR',
-    images: [{ url: '/og.png', width: 1200, height: 675, alt: 'NUPLEX' }],
+    images: [{ url: '/nuplex_social-preview.jpg', width: 1280, height: 640, alt: 'NUPLEX' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'NUPLEX — 나만의 OTT',
     description: DESCRIPTION,
-    images: ['/og.png'],
+    images: ['/nuplex_social-preview.jpg'],
   },
 }
 

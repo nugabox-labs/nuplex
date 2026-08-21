@@ -89,6 +89,6 @@ export const config = {
   // Next.js 내부 자산과 파비콘 · OG 이미지는 검사하지 않는다(OG 는 외부 미리보기가 읽어야 한다).
   // 입장 화면 배경(/intro/*)도 마찬가지다 — 아직 아무 관문도 통과하지 않은 사람이 보는 그림이다.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon-64.png|apple-icon.png|og.png|intro/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|icon-64.png|apple-icon.png|nuplex_social-preview.jpg|intro/).*)',
   ],
 }
