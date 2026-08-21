@@ -42,15 +42,34 @@ export async function LibraryBrowser({
 
   return (
     <div className="page-top pb-20">
-      {/* 제목이 맨 먼저다. 컬렉션이 있는 분류만 시리즈 모음 줄이 위에 붙어
-          제목이 아래로 밀려 있었다 — 같은 분류인데 화면마다 첫 줄이 달라진다.
-          시리즈 모음은 제목 아래, 작품 그리드 위에 둔다. */}
+      {/* 화면의 뼈대는 어느 분류에서나 같다 —
+            분류 이름 → 시리즈 모음 → 전체 작품 + 정렬 → 그리드.
+
+          컬렉션이 있고 없고에 따라 첫 줄이 달라지면 같은 성격의 화면인데도
+          매번 다시 읽어야 한다. 그래서 시리즈 모음이 없는 분류에서도 소제목과
+          정렬 줄은 그대로 둔다.
+
+          개수는 h1 이 아니라 소제목이 진다. 위는 "어느 분류인가", 아래는
+          "그 안에 낱개가 몇 개인가" 로 역할이 갈린다. 소제목을 "전체 작품" 으로
+          둔 것은 바로 위 "시리즈 모음" 과 대구를 이루기 위해서다 — 묶음 ↔ 낱개. */}
       <div className="px-4 md:px-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+        <h1 className="mb-6 text-2xl font-bold text-foreground md:text-3xl">
           <SectionTitle title={heading} />
-          <span className="ml-2 text-base font-normal text-muted-foreground">{total}편</span>
         </h1>
+
+      {collections.length > 0 ? (
+        <div className="mb-8 -mx-4 md:-mx-8">
+          <CollectionRow collections={collections} />
+        </div>
+      ) : null}
+
+      {/* 이 줄이 목록의 시작을 알리는 경계도 겸한다. 시리즈 모음이 가로 스크롤이라
+          선이나 여백만으로는 어디서 끝났는지 잘 보이지 않는다. */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-3">
+        <h2 className="text-lg font-bold text-foreground md:text-xl">
+          전체 작품
+          <span className="ml-2 text-sm font-normal text-muted-foreground">{total}편</span>
+        </h2>
 
         <div className="flex flex-wrap gap-1">
           {SORTS.map((option) => (
@@ -68,12 +87,6 @@ export async function LibraryBrowser({
           ))}
         </div>
       </div>
-
-      {collections.length > 0 ? (
-        <div className="mb-8 -mx-4 md:-mx-8">
-          <CollectionRow collections={collections} />
-        </div>
-      ) : null}
 
       {items.length === 0 ? (
         <p className="py-20 text-center text-sm text-muted-foreground">작품이 없습니다.</p>
