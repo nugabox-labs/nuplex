@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { AppScroll } from '@/components/app-scroll'
 import { NativeBridgeReady } from '@/components/native-bridge-ready'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -27,8 +28,12 @@ export const metadata: Metadata = {
       { url: '/icon-64.png', type: 'image/png', sizes: '64x64' },
       { url: '/icon.png', type: 'image/png', sizes: '1024x1024' },
     ],
-    apple: '/icon.png',
+    // 홈 화면 · Dock 아이콘은 모서리를 둥글게 깎지 않은 불투명 정사각형이라야
+    // OS 가 자기 마스크를 씌워 꽉 채운다. 투명 모서리가 있으면 Safari 가
+    // 흰 타일 안에 여백을 두고 축소해서 넣어버린다.
+    apple: [{ url: '/apple-icon.png', type: 'image/png', sizes: '180x180' }],
   },
+  manifest: '/manifest.webmanifest',
   // 카카오톡 · 메신저에 링크를 붙였을 때 뜨는 미리보기.
   openGraph: {
     type: 'website',
@@ -63,7 +68,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className="bg-background">
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
+        <AppScroll>{children}</AppScroll>
         {/* 앱 셸에 라우팅 준비 완료를 알린다. 브라우저에서는 아무 일도 하지 않는다. */}
         <NativeBridgeReady />
       </body>
