@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export default function AdminProfilesPage() {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10 md:px-8">
+    <main className="page-safe mx-auto max-w-5xl px-4 md:px-8">
       <AdminNav current="profiles" />
       <ProfileAdmin />
     </main>

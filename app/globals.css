@@ -148,6 +148,15 @@
       padding-top: calc(7rem + env(safe-area-inset-top));
     }
   }
+
+  /* 상단 바가 없는 화면(관리자)은 기댈 헤더가 없으니 안전영역을 스스로 비운다.
+     `py-10` 만 주면 앱 웹뷰에서 탭 줄이 상태 표시줄 · 다이나믹 아일랜드 밑에 깔린다.
+     아래도 같이 준다 — 홈 인디케이터에 마지막 줄이 닿는다.
+     브라우저에서는 inset 이 0 이라 py-10 과 똑같다. */
+  .page-safe {
+    padding-top: calc(2.5rem + env(safe-area-inset-top));
+    padding-bottom: calc(2.5rem + env(safe-area-inset-bottom));
+  }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
