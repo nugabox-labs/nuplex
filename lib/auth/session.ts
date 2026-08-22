@@ -9,8 +9,10 @@
 
 export const ADMIN_COOKIE = 'nuplex_admin'
 
-// 관리자 세션은 짧게 둔다. 알림을 올릴 때만 쓰는 권한이다.
-export const ADMIN_MAX_AGE_SECONDS = 60 * 60 * 12 // 12시간
+// 관리자 세션. 프로필 쿠키(1년)보다는 짧게 두되, 12시간은 너무 짧았다 —
+// 관리자 프로필로 입장할 때 비밀번호를 이미 확인하는데도 하루가 지나면
+// 관리자 화면에서 같은 값을 다시 물었다.
+export const ADMIN_MAX_AGE_SECONDS = 60 * 60 * 24 * 7 // 7일
 
 function toBase64Url(bytes: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)))
