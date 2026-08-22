@@ -14,23 +14,55 @@ export function SeasonList({ seasons }: { seasons: SeasonWithEpisodes[] }) {
 
   return (
     <section className="mt-10">
-      <div className="mb-4 flex flex-wrap gap-1">
+      {/* 시즌은 포스터로 고른다. 이름만 늘어놓으면 "시즌 1 · 시즌 2" 뿐이라
+          어느 것이 무엇인지 알아볼 단서가 없다. */}
+      <h2 className="mb-3 text-lg font-bold text-foreground">시즌 {seasons.length}개</h2>
+      <ul className="no-scrollbar mb-6 flex gap-3 overflow-x-auto pb-2">
         {seasons.map((s, index) => (
-          <button
-            key={s.ratingKey}
-            type="button"
-            onClick={() => setSelected(index)}
-            className={cn(
-              'rounded-md px-3 py-1.5 text-sm font-medium transition',
-              index === selected
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {s.title}
-          </button>
+          <li key={s.ratingKey} className="w-24 shrink-0 sm:w-28">
+            <button
+              type="button"
+              onClick={() => setSelected(index)}
+              aria-pressed={index === selected}
+              className="w-full text-left"
+            >
+              <div
+                className={cn(
+                  'relative aspect-[2/3] w-full overflow-hidden rounded-md border bg-secondary transition',
+                  index === selected
+                    ? 'border-primary ring-2 ring-primary/40'
+                    : 'border-border opacity-70 hover:opacity-100',
+                )}
+              >
+                {s.poster ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={s.poster}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                    {s.title}
+                  </span>
+                )}
+              </div>
+              <p
+                className={cn(
+                  'mt-1.5 truncate text-xs font-semibold',
+                  index === selected ? 'text-primary' : 'text-foreground',
+                )}
+              >
+                {s.title}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {metaLine(s.year, s.episodes.length > 0 ? `${s.episodes.length}화` : null)}
+              </p>
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {season.episodes.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">

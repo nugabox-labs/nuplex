@@ -36,8 +36,13 @@ export interface LibraryItem {
   playUrl: string
   /** `playUrl` 이 가리키는 것의 종류. 시리즈면 `episode` 가 된다. */
   playType: string
-  /** 카드 아래에 한 줄 덧붙일 말. "이어서 보기" 줄에서만 채운다 */
+  /** 카드 아래에 한 줄 덧붙일 말. "이어서 보기" 줄과 연재 중인 시즌에서 채운다 */
   badge?: string
+  /**
+   * 카드를 눌렀을 때 갈 곳. 비어 있으면 `/title/<ratingKey>` 다.
+   * 연재 중인 시즌은 `ratingKey` 가 시즌이라 작품 상세로 따로 보내야 한다.
+   */
+  href?: string
 }
 
 export interface Credit {
@@ -51,6 +56,8 @@ export interface SeasonWithEpisodes {
   seasonIndex: number | null
   title: string
   poster: string | null
+  /** 시즌 표에는 연도가 없다. 그 시즌 첫 화의 방영일에서 뽑는다 */
+  year: number | null
   episodes: {
     ratingKey: string
     episodeIndex: number | null
@@ -548,15 +555,80 @@ export async function getContinueWatching(profileId: number, limit = 20): Promis
 // Plex 는 "지금 연재 중인가" 를 모른다. media_item 에 컬럼을 붙이면 sync 가 덮어쓰므로
 // featured_series 에 따로 담는다(database/0005_featured_series.sql).
 
-/** 홈 최상단 줄. 관리자가 켠 시리즈만, 정한 순서대로. */
+/** 홈 최상단 줄. 관리자가 켠 작품과 시즌을, 정한 순서대로 섞어서. */
 export async function getFeaturedSeries(): Promise<LibraryItem[]> {
-  const rows = await query<ItemRow>(
-    `${ITEM_SELECT}
-      JOIN featured_series f ON f.rating_key = m.rating_key
-     WHERE m.deleted_at IS NULL
-     ORDER BY f.sort_order, f.created_at DESC`,
+  type Ordered = { sort_order: number; created_at: Date }
+
+  const [shows, seasons] = await Promise.all([
+    query<ItemRow & Ordered>(
+      `${ITEM_SELECT}
+        JOIN featured_series f ON f.rating_key = m.rating_key
+       WHERE m.deleted_at IS NULL`,
+    ),
+    // 시즌은 작품 정보를 그대로 쓰고 포스터 · 이름만 시즌 것으로 덮는다.
+    query<
+      ItemRow &
+        Ordered & {
+          season_rating_key: string
+          season_title: string
+          season_index: number | null
+          season_poster_file: string | null
+          season_first_episode: string | null
+        }
+    >(
+      `SELECT item.*, f.sort_order, f.created_at,
+              se.rating_key AS season_rating_key, se.title AS season_title,
+              se.season_index, se.poster_file AS season_poster_file,
+              (
+                SELECT e.rating_key FROM episode e
+                 WHERE e.season_rating_key = se.rating_key AND e.deleted_at IS NULL
+                   AND e.episode_index IS NOT NULL
+                 ORDER BY e.episode_index LIMIT 1
+              ) AS season_first_episode
+         FROM featured_season f
+         JOIN season se ON se.rating_key = f.rating_key
+         JOIN (${ITEM_SELECT} WHERE m.deleted_at IS NULL) item
+           ON item.rating_key = se.show_rating_key
+        WHERE se.deleted_at IS NULL`,
+    ),
+  ])
+
+  const items = [
+    ...shows.map((row) => ({ row, item: toItem(row) })),
+    ...seasons.map((row) => {
+      const label = seasonLabel(row.season_title, row.season_index)
+      return {
+        row,
+        item: {
+          ...toItem(row),
+          // 카드 하나가 시즌 하나다. 링크만 작품 상세로 돌린다.
+          ratingKey: row.season_rating_key,
+          href: `/title/${row.rating_key}`,
+          poster: mediaUrl(row.season_poster_file) ?? mediaUrl(row.poster_file),
+          // 시즌 이름이 "시즌 1" 일 수 있어 작품명은 제목 자리에 그대로 둔다.
+          badge: label,
+          plexUrl: plexDeepLink(row.season_rating_key),
+          playUrl: plexDeepLink(row.season_first_episode ?? row.first_episode_rating_key ?? row.rating_key),
+          playType: row.season_first_episode || row.first_episode_rating_key ? 'episode' : row.type,
+        } satisfies LibraryItem,
+      }
+    }),
+  ]
+
+  items.sort(
+    (a, b) =>
+      a.row.sort_order - b.row.sort_order ||
+      new Date(b.row.created_at).getTime() - new Date(a.row.created_at).getTime(),
   )
-  return rows.map(toItem)
+  return items.map((entry) => entry.item)
+}
+
+export interface AdminSeason {
+  ratingKey: string
+  title: string
+  year: number | null
+  poster: string | null
+  featured: boolean
 }
 
 export interface AdminShow {
@@ -566,27 +638,66 @@ export interface AdminShow {
   poster: string | null
   sectionTitle: string
   featured: boolean
+  seasons: AdminSeason[]
 }
 
 /** 관리자 화면 — 시리즈 전체에 연재 여부를 얹는다. 켠 것이 위로 온다. */
 export async function listShowsForAdmin(): Promise<AdminShow[]> {
-  const rows = await query<{
-    rating_key: string
-    title: string
-    year: number | null
-    poster_file: string | null
-    section_title: string
-    featured: boolean
-  }>(
-    `SELECT m.rating_key, m.title, m.year, m.poster_file, s.title AS section_title,
-            (f.rating_key IS NOT NULL) AS featured
-       FROM media_item m
-       JOIN library_section s ON s.id = m.section_id
-       LEFT JOIN featured_series f ON f.rating_key = m.rating_key
-      WHERE m.deleted_at IS NULL AND m.type = 'show'
-      ORDER BY (f.rating_key IS NOT NULL) DESC, f.sort_order,
-               coalesce(m.title_sort, m.title)`,
-  )
+  const [rows, seasonRows] = await Promise.all([
+    query<{
+      rating_key: string
+      title: string
+      year: number | null
+      poster_file: string | null
+      section_title: string
+      featured: boolean
+    }>(
+      `SELECT m.rating_key, m.title, m.year, m.poster_file, s.title AS section_title,
+              (f.rating_key IS NOT NULL) AS featured
+         FROM media_item m
+         JOIN library_section s ON s.id = m.section_id
+         LEFT JOIN featured_series f ON f.rating_key = m.rating_key
+        WHERE m.deleted_at IS NULL AND m.type = 'show'
+        ORDER BY (f.rating_key IS NOT NULL) DESC, f.sort_order,
+                 coalesce(m.title_sort, m.title)`,
+    ),
+    // 시즌은 453편 전체를 한 번에 받아 작품별로 접는다. 시즌마다 물으면 곧 수백 번이다.
+    query<{
+      rating_key: string
+      show_rating_key: string
+      title: string
+      season_index: number | null
+      poster_file: string | null
+      year: number | null
+      featured: boolean
+    }>(
+      `SELECT se.rating_key, se.show_rating_key, se.title, se.season_index, se.poster_file,
+              (f.rating_key IS NOT NULL) AS featured,
+              (
+                SELECT EXTRACT(YEAR FROM min(e.originally_available_at))::int
+                  FROM episode e
+                 WHERE e.season_rating_key = se.rating_key AND e.deleted_at IS NULL
+              ) AS year
+         FROM season se
+         LEFT JOIN featured_season f ON f.rating_key = se.rating_key
+        WHERE se.deleted_at IS NULL
+        ORDER BY se.season_index NULLS LAST`,
+    ),
+  ])
+
+  const bySeries = new Map<string, AdminSeason[]>()
+  for (const row of seasonRows) {
+    const list = bySeries.get(row.show_rating_key) ?? []
+    list.push({
+      ratingKey: row.rating_key,
+      title: seasonLabel(row.title, row.season_index),
+      year: row.year,
+      poster: mediaUrl(row.poster_file),
+      featured: row.featured,
+    })
+    bySeries.set(row.show_rating_key, list)
+  }
+
   return rows.map((row) => ({
     ratingKey: row.rating_key,
     title: row.title,
@@ -594,18 +705,24 @@ export async function listShowsForAdmin(): Promise<AdminShow[]> {
     poster: mediaUrl(row.poster_file),
     sectionTitle: row.section_title,
     featured: row.featured,
+    seasons: bySeries.get(row.rating_key) ?? [],
   }))
 }
 
-/** 연재 표시를 켜고 끈다. */
-export async function setFeatured(ratingKey: string, featured: boolean): Promise<void> {
+/** 연재 표시를 켜고 끈다. 작품과 시즌은 담기는 표가 다르다. */
+export async function setFeatured(
+  ratingKey: string,
+  featured: boolean,
+  kind: 'show' | 'season' = 'show',
+): Promise<void> {
+  const table = kind === 'season' ? 'featured_season' : 'featured_series'
   if (featured) {
-    await db.query(`INSERT INTO featured_series (rating_key) VALUES ($1) ON CONFLICT DO NOTHING`, [
+    await db.query(`INSERT INTO ${table} (rating_key) VALUES ($1) ON CONFLICT DO NOTHING`, [
       ratingKey,
     ])
     return
   }
-  await db.query(`DELETE FROM featured_series WHERE rating_key = $1`, [ratingKey])
+  await db.query(`DELETE FROM ${table} WHERE rating_key = $1`, [ratingKey])
 }
 
 export type SortKey = 'added' | 'title' | 'year' | 'rating'
@@ -723,16 +840,20 @@ export async function getSeasons(showRatingKey: string): Promise<SeasonWithEpiso
     [showRatingKey],
   )
 
-  return seasons.map((s) => ({
+  return seasons.map((s) => {
+    const mine = episodes.filter((e) =>
+      // 에피소드가 시즌에 안 붙어 있는 경우가 있어 시즌 번호로도 맞춰본다.
+      e.season_rating_key ? e.season_rating_key === s.rating_key : e.season_index === s.season_index,
+    )
+    const firstAired = mine.find((e) => e.originally_available_at)?.originally_available_at ?? null
+
+    return {
     ratingKey: s.rating_key,
     seasonIndex: s.season_index,
     title: seasonLabel(s.title, s.season_index),
     poster: mediaUrl(s.poster_file),
-    episodes: episodes
-      .filter((e) =>
-        // 에피소드가 시즌에 안 붙어 있는 경우가 있어 시즌 번호로도 맞춰본다.
-        e.season_rating_key ? e.season_rating_key === s.rating_key : e.season_index === s.season_index,
-      )
+    year: firstAired ? new Date(firstAired).getFullYear() : null,
+    episodes: mine
       .map((e) => ({
         ratingKey: e.rating_key,
         episodeIndex: e.episode_index,
@@ -745,7 +866,8 @@ export async function getSeasons(showRatingKey: string): Promise<SeasonWithEpiso
           : null,
         plexUrl: plexDeepLink(e.rating_key),
       })),
-  }))
+    }
+  })
 }
 
 /** 제목 · 원제 · 출연진 부분일치 검색. */

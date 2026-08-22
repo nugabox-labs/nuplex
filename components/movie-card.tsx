@@ -18,7 +18,7 @@ export function MovieCard({ item }: { item: LibraryItem }) {
       className="w-40 shrink-0 sm:w-44 md:w-48"
     >
       <Link
-        href={`/title/${item.ratingKey}`}
+        href={item.href ?? `/title/${item.ratingKey}`}
         className="group block overflow-hidden rounded-lg border border-border bg-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <div className="relative aspect-[2/3] w-full overflow-hidden bg-secondary">

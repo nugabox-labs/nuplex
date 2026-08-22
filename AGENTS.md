@@ -39,7 +39,8 @@ docs/ 전체를 읽지 말 것.
   사람이 만드는 데이터는 동기화로 복구되지 않는다 — **백업 대상은 이것뿐이다.**
   · `notice` · `notice_target` — 알림
   · `profile` — 표시 이름 · 이메일 보정 · 노출 여부
-  · `featured_series` — 연재 중인 시리즈 (`database/0005_featured_series.sql`)
+  · `featured_series` · `featured_season` — 연재 중인 작품 · 시즌
+    (`database/0005_featured_series.sql` · `database/0012_featured_season.sql`)
   · `conversation` · `message` · `conversation_read` — 채팅 (`docs/CHAT.md`)
   (`watch_history` 는 Plex 사본이라 여기 없다 — sync 가 다시 받아온다)
   이 목록을 늘리는 테이블(찜 목록 등)을 더 추가하려면 먼저 상의한다.
