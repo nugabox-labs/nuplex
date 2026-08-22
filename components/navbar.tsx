@@ -80,7 +80,7 @@ export function Navbar({
   }
 
   return (
-    // pt-[env(...)] 는 앱 셸에서만 값이 생긴다. 웹뷰가 viewport-fit=cover 로 노치
+    // 위쪽 안전 영역 여백은 앱 셸에서만 값이 생긴다. 웹뷰가 viewport-fit=cover 로 노치
     // 아래까지 그리므로(app/layout.tsx), 이 여백이 없으면 로고와 오른쪽 아이콘들이
     // 상태바에 깔린다. 겹쳐 보이는 것으로 끝나지 않고 iOS 상태바가 탭을 먼저 먹어
     // 채팅·알림 버튼이 아예 안 눌린다. 브라우저에서는 inset 이 0 이라 그대로다.
