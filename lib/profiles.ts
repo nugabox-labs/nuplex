@@ -233,6 +233,30 @@ export async function getHomeLayout(profileId: number): Promise<HomeLayout> {
   }
 }
 
+/** "내 취향" 의 시청 목록에서 감춘 작품(database/0014_hidden_watched.sql). */
+export async function getHiddenWatched(profileId: number): Promise<string[]> {
+  const row = await queryOne<{ hidden_watched_items: string[] | null }>(
+    `SELECT hidden_watched_items FROM profile WHERE id = $1`,
+    [profileId],
+  )
+  return row?.hidden_watched_items ?? []
+}
+
+/** 감출 작품을 더한다. 이미 감춘 것은 그대로 둔다. */
+export async function addHiddenWatched(profileId: number, ratingKeys: string[]): Promise<void> {
+  if (ratingKeys.length === 0) return
+  await db.query(
+    `UPDATE profile
+        SET hidden_watched_items = (
+              SELECT array_agg(DISTINCT key)
+                FROM unnest(coalesce(hidden_watched_items, '{}') || $2::text[]) AS key
+            ),
+            updated_at = now()
+      WHERE id = $1`,
+    [profileId, ratingKeys],
+  )
+}
+
 /** 빈 배열을 주면 기본값(기본 차례 · 숨김 없음)으로 되돌린다. */
 export async function setHomeLayout(
   profileId: number,

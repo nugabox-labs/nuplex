@@ -55,7 +55,7 @@ export function AiAdmin() {
 
         {data.hasKey ? null : (
           <p className="mb-3 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
-            <code>DEEPSEEK_API_KEY</code> 가 비어 있습니다. 키를 넣기 전까지 &quot;내 공간&quot; 의
+            <code>DEEPSEEK_API_KEY</code> 가 비어 있습니다. 키를 넣기 전까지 &quot;내 취향&quot; 의
             AI 카드는 나오지 않습니다(시청 목록 · 통계는 그대로 나옵니다).
           </p>
         )}
@@ -76,7 +76,7 @@ export function AiAdmin() {
         {chosen ? <p className="mt-2 text-sm text-muted-foreground">{chosen.note}</p> : null}
 
         <p className="mt-3 text-xs text-muted-foreground">
-          모델을 바꾸면 각 프로필의 취향 요약은 다음에 &quot;내 공간&quot; 을 열 때 새 모델로 다시
+          모델을 바꾸면 각 프로필의 취향 요약은 다음에 &quot;내 취향&quot; 을 열 때 새 모델로 다시
           만들어집니다. 한 번 만드는 데 30초에서 1분쯤 걸립니다.
         </p>
       </section>

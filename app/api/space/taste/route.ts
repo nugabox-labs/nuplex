@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
 import { AiUnavailableError, hasApiKey } from '@/lib/ai/deepseek'
 import { NotEnoughHistoryError, generateTaste, getCachedTaste } from '@/lib/ai/taste'
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 // 만드는 데 1분 가까이 걸린다. 기본값(대개 15초)으로 두면 다 만들고도 응답이 끊긴다.
 export const maxDuration = 180
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   const profileId = await readProfileValue((await cookies()).get(PROFILE_COOKIE)?.value)
   if (!profileId) {
     return NextResponse.json({ state: 'unavailable', message: '프로필이 없습니다.' })
@@ -21,12 +21,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ state: 'no-key' })
   }
 
-  const body = (await request.json().catch(() => null)) as { refresh?: boolean } | null
-
   try {
-    // 담아둔 것이 아직 쓸 만하면 그대로 준다. "다시 분석" 을 누른 때만 건너뛴다.
-    const cached = body?.refresh === true ? null : await getCachedTaste(profileId)
-    const taste = cached ?? (await generateTaste(profileId))
+    // 담아둔 것이 아직 쓸 만하면 그대로 준다. 낡았을 때만 새로 만든다.
+    const taste = (await getCachedTaste(profileId)) ?? (await generateTaste(profileId))
     return NextResponse.json({ state: 'ok', taste })
   } catch (error) {
     if (error instanceof NotEnoughHistoryError) {

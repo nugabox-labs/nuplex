@@ -2,13 +2,16 @@ import { cookies } from 'next/headers'
 import { CollectionRow } from '@/components/collection-row'
 import { ContentRow } from '@/components/content-row'
 import { HeroCarousel } from '@/components/hero-carousel'
+import { TasteRow } from '@/components/taste-row'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
-import { getHomeLayout, type HomeLayout } from '@/lib/profiles'
+import { getCurrentProfile, getHomeLayout, type HomeLayout } from '@/lib/profiles'
+import { getCachedTaste } from '@/lib/ai/taste'
 import {
   getContinueWatching,
   getFeaturedSeries,
   getHeroItems,
   getHomeRows,
+  hasWatchHistory,
   listShuffledCollections,
 } from '@/lib/library'
 
@@ -30,14 +33,20 @@ export default async function HomePage() {
   // 이어서 보기는 지금 들어와 있는 프로필의 것이다. 프로필이 없으면 줄 자체가 없다.
   const profileId = await readProfileValue((await cookies()).get(PROFILE_COOKIE)?.value)
 
-  const [heroItems, rows, collections, featured, continueWatching, layout] = await Promise.all([
-    getHeroItems(10),
-    getHomeRows(),
-    listShuffledCollections(),
-    getFeaturedSeries(),
-    profileId ? getContinueWatching(profileId) : [],
-    profileId ? getHomeLayout(profileId) : ({ order: null, hidden: [] } as HomeLayout),
-  ])
+  const [heroItems, rows, collections, featured, continueWatching, layout, profile, watched, taste] =
+    await Promise.all([
+      getHeroItems(10),
+      getHomeRows(),
+      listShuffledCollections(),
+      getFeaturedSeries(),
+      profileId ? getContinueWatching(profileId) : [],
+      profileId ? getHomeLayout(profileId) : ({ order: null, hidden: [] } as HomeLayout),
+      profileId ? getCurrentProfile(profileId) : null,
+      // 본 것이 하나도 없으면 추천 줄을 걸지 않는다. 만들 재료가 없다
+      profileId ? hasWatchHistory(profileId) : false,
+      // 담아둔 추천만 읽는다. 없으면 화면이 뜬 뒤 TasteRow 가 조용히 만들어 온다
+      profileId ? getCachedTaste(profileId).catch(() => null) : null,
+    ])
 
   if (rows.length === 0) {
     return (
@@ -77,6 +86,11 @@ export default async function HomePage() {
         {/* 보다 만 시리즈 — 그 사람 것이라 맨 위에 둔다 */}
         {continueWatching.length > 0 ? (
           <ContentRow row={{ key: 'continue', title: '이어서 보기', items: continueWatching }} />
+        ) : null}
+
+        {/* AI 가 고른 작품. 이어서 보기와 같이 그 사람 것이라 차례를 바꾸지 않는다 */}
+        {profile && watched ? (
+          <TasteRow title={`${profile.name}님이 볼 만한 작품`} initial={taste?.picks ?? null} />
         ) : null}
 
         {/* 나머지 줄은 프로필에 저장된 차례를 따른다(프로필 메뉴 → 홈 화면 설정).

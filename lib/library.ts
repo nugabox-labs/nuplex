@@ -550,7 +550,7 @@ export async function getContinueWatching(profileId: number, limit = 20): Promis
   }))
 }
 
-// --- 내 공간 (프로필별 시청 기록 · 통계) --------------------------------------
+// --- 내 취향 (프로필별 시청 기록 · 통계) --------------------------------------
 //
 // watch_history 는 Plex 사본이라 우리 라이브러리에서 이미 빠진 것(제외 섹션 · 지워진 작품)의
 // 기록도 그대로 들어온다. 화면에 안 보이는 것을 숫자에만 넣으면 합이 안 맞아 보이므로,
@@ -575,7 +575,13 @@ export async function getWatchedItems(profileId: number, limit = 200): Promise<W
      ),
      grouped AS (
        SELECT item_key, count(*) AS view_count, max(viewed_at) AS last_viewed_at
-         FROM mine GROUP BY item_key
+         FROM mine
+        -- 사람이 감춘 작품은 목록에서만 뺀다. 통계는 그대로 센다
+        -- (database/0014_hidden_watched.sql)
+        WHERE item_key <> ALL(
+                coalesce((SELECT hidden_watched_items FROM profile WHERE id = $1), '{}')
+              )
+        GROUP BY item_key
      )
      SELECT item.*, g.view_count, g.last_viewed_at
        FROM grouped g
@@ -592,6 +598,23 @@ export async function getWatchedItems(profileId: number, limit = 200): Promise<W
     viewCount: Number(row.view_count),
     lastViewedAt: row.last_viewed_at,
   }))
+}
+
+/**
+ * 이 프로필에 시청 기록이 하나라도 있는가.
+ *
+ * 홈이 추천 줄을 걸지 말지 정할 때만 쓴다 — 기록이 없으면 줄을 아예 만들지 않으므로
+ * 통계 전체를 세는 것보다 이 한 줄이 싸다.
+ */
+export async function hasWatchHistory(profileId: number): Promise<boolean> {
+  const row = await queryOne<{ found: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM watch_history
+        WHERE plex_account_id = (SELECT plex_account_id FROM profile WHERE id = $1)
+     ) AS found`,
+    [profileId],
+  )
+  return row?.found ?? false
 }
 
 export interface WatchStats {
