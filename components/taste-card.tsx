@@ -90,7 +90,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <section className="rounded-xl border border-border bg-card/60 p-5 md:p-6">
       <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
         <Sparkles className="h-4 w-4" />
-        AI 취향 요약
+        내 취향 분석
       </h2>
       {children}
     </section>

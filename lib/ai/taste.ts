@@ -26,6 +26,12 @@ const MIN_VIEWS = 1
 const RESTALE_VIEWS = 10
 /** 홈 줄 하나를 채울 만큼 고르게 한다 */
 const PICK_COUNT = 10
+/**
+ * 프롬프트 · 저장 형식의 판 번호. **말투나 picks 모양을 고치면 반드시 올린다.**
+ * 담아둔 것이 이 번호와 다르면 낡은 것으로 보고 다시 만든다
+ * (database/0015_taste_prompt_version.sql).
+ */
+const PROMPT_VERSION = 1
 
 export interface Taste {
   summary: string
@@ -46,6 +52,7 @@ interface TasteRow {
   /** rating_key 배열 */
   picks: string[]
   view_count: number
+  prompt_version: number
   created_at: Date
 }
 
@@ -63,12 +70,14 @@ async function toTaste(row: TasteRow): Promise<Taste> {
 /** 담아둔 것. 없거나 낡았으면 null 이다 — 화면이 그때만 새로 만들자고 부른다. */
 export async function getCachedTaste(profileId: number): Promise<Taste | null> {
   const row = await queryOne<TasteRow>(
-    `SELECT model, summary, tags, picks, view_count, created_at
+    `SELECT model, summary, tags, picks, view_count, prompt_version, created_at
        FROM profile_taste WHERE profile_id = $1`,
     [profileId],
   )
   if (!row) return null
 
+  // 말투나 저장 형식이 바뀐 뒤에 담긴 것이 아니면 버린다.
+  if (row.prompt_version !== PROMPT_VERSION) return null
   // 관리자가 모델을 바꿨으면 그 모델로 다시 만든다.
   if (row.model !== (await getModel())) return null
 
@@ -165,8 +174,11 @@ export async function generateTaste(profileId: number): Promise<Taste> {
     ].join('\n'),
   })
 
-  const summary = typeof answer.summary === 'string' ? spaceMiddleDots(answer.summary.trim()) : ''
-  if (!summary) throw new AiUnavailableError('요약이 비어 있습니다.')
+  const written = typeof answer.summary === 'string' ? spaceMiddleDots(answer.summary.trim()) : ''
+  if (!written) throw new AiUnavailableError('요약이 비어 있습니다.')
+
+  // 이름으로 시작하는 것은 부탁이 아니라 규칙이다. 모델이 빠뜨리면 여기서 붙인다.
+  const summary = written.startsWith(name) ? written : `${name}님! ${written}`
 
   const tags = Array.isArray(answer.tags)
     ? answer.tags
@@ -202,14 +214,23 @@ export async function generateTaste(profileId: number): Promise<Taste> {
   const model = await getModel()
 
   await query(
-    `INSERT INTO profile_taste (profile_id, model, summary, tags, picks, view_count, created_at)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, now())
+    `INSERT INTO profile_taste
+       (profile_id, model, summary, tags, picks, view_count, prompt_version, created_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, now())
        ON CONFLICT (profile_id) DO UPDATE
           SET model = excluded.model, summary = excluded.summary, tags = excluded.tags,
               picks = excluded.picks, view_count = excluded.view_count,
-              created_at = excluded.created_at`,
-    [profileId, model, summary, tags, JSON.stringify(picks), stats.views],
+              prompt_version = excluded.prompt_version, created_at = excluded.created_at`,
+    [profileId, model, summary, tags, JSON.stringify(picks), stats.views, PROMPT_VERSION],
   )
 
-  return toTaste({ model, summary, tags, picks, view_count: stats.views, created_at: new Date() })
+  return toTaste({
+    model,
+    summary,
+    tags,
+    picks,
+    view_count: stats.views,
+    prompt_version: PROMPT_VERSION,
+    created_at: new Date(),
+  })
 }

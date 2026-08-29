@@ -7,7 +7,6 @@ import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
 import { getCachedTaste } from '@/lib/ai/taste'
 import { formatDuration, formatRelativeTime } from '@/lib/format'
 import { getWatchStats, getWatchedItems } from '@/lib/library'
-import { getCurrentProfile } from '@/lib/profiles'
 
 export const metadata: Metadata = { title: '내 취향' }
 export const dynamic = 'force-dynamic'
@@ -30,8 +29,7 @@ export default async function SpacePage() {
 
   // 취향 카드는 담아둔 것만 서버에서 읽는다. 새로 만드는 일(30초~1분)은 화면이 뜬 뒤
   // 클라이언트가 /api/space/taste 로 맡는다 — 여기서 기다리면 화면이 통째로 늦는다.
-  const [profile, stats, watched, cachedTaste] = await Promise.all([
-    getCurrentProfile(profileId),
+  const [stats, watched, cachedTaste] = await Promise.all([
     getWatchStats(profileId),
     getWatchedItems(profileId, LIST_LIMIT),
     getCachedTaste(profileId).catch(() => null),
@@ -45,15 +43,7 @@ export default async function SpacePage() {
 
   return (
     <div className="page-top px-4 pb-20 md:px-8">
-      <h1 className="mb-2 text-2xl font-bold text-foreground md:text-3xl">
-        내 취향
-        {profile ? (
-          <span className="ml-2 text-base font-normal text-muted-foreground">{profile.name}</span>
-        ) : null}
-      </h1>
-      <p className="mb-8 text-sm text-muted-foreground">
-        지금까지 본 작품과 취향을 모아 둔 곳입니다.
-      </p>
+      <h1 className="mb-8 text-2xl font-bold text-foreground md:text-3xl">내 취향</h1>
 
       {stats.views === 0 ? (
         <Empty title="아직 본 작품이 없습니다">
