@@ -213,7 +213,7 @@ export function Navbar({
                     <p className="truncate px-4 py-2 text-sm font-semibold text-foreground">
                       {profile.name}
                     </p>
-                    {/* 내 공간 — 시청 목록 · 통계 · 취향 요약. 프로필이 있어야 볼 것이
+                    {/* 내 취향 — 취향 요약 · 시청 기록 · 본 작품. 프로필이 있어야 볼 것이
                         생기므로 프로필이 있을 때만 둔다 */}
                     <Link
                       href="/space"
@@ -225,7 +225,7 @@ export function Navbar({
                       )}
                     >
                       <Sparkles className="h-4 w-4" />
-                      내 공간
+                      내 취향
                     </Link>
                   </>
                 ) : null}

@@ -20,7 +20,7 @@ CREATE TABLE profile_taste (
   model      text NOT NULL,
   summary    text NOT NULL,
   tags       text[] NOT NULL DEFAULT '{}',
-  -- 추천. [{ "ratingKey": "1201", "reason": "…" }] 꼴이다.
+  -- 추천. 작품 rating_key 배열이다 — ["1201", "1330"] 꼴.
   -- 라이브러리에 실제로 있는 작품만 담긴다 — 없는 것을 지어내면 저장 전에 걸러낸다.
   picks      jsonb NOT NULL DEFAULT '[]'::jsonb,
   -- 만들 당시 이 사람의 시청 편수. 이보다 충분히 더 봤으면 다시 만든다.
