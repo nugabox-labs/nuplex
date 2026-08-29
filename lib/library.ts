@@ -550,6 +550,211 @@ export async function getContinueWatching(profileId: number, limit = 20): Promis
   }))
 }
 
+// --- 내 공간 (프로필별 시청 기록 · 통계) --------------------------------------
+//
+// watch_history 는 Plex 사본이라 우리 라이브러리에서 이미 빠진 것(제외 섹션 · 지워진 작품)의
+// 기록도 그대로 들어온다. 화면에 안 보이는 것을 숫자에만 넣으면 합이 안 맞아 보이므로,
+// 아래 조회는 전부 **지금 라이브러리에 남아 있는 것**만 센다.
+//
+// 에피소드는 작품 단위로 접는다. 17,903화를 한 줄씩 늘어놓으면 목록이 아니라 로그가 된다.
+
+export interface WatchedItem extends LibraryItem {
+  /** 이 작품에서 본 편수. 같은 화를 다시 봤으면 다시 센다 */
+  viewCount: number
+  lastViewedAt: Date
+}
+
+/** 이 프로필이 본 작품. 마지막으로 본 것이 앞에 온다. */
+export async function getWatchedItems(profileId: number, limit = 200): Promise<WatchedItem[]> {
+  const rows = await query<ItemRow & { view_count: string; last_viewed_at: Date }>(
+    `WITH mine AS (
+       -- 에피소드는 그 시리즈로, 영화는 그 자신으로 접는다
+       SELECT coalesce(h.show_rating_key, h.rating_key) AS item_key, h.viewed_at
+         FROM watch_history h
+        WHERE h.plex_account_id = (SELECT plex_account_id FROM profile WHERE id = $1)
+     ),
+     grouped AS (
+       SELECT item_key, count(*) AS view_count, max(viewed_at) AS last_viewed_at
+         FROM mine GROUP BY item_key
+     )
+     SELECT item.*, g.view_count, g.last_viewed_at
+       FROM grouped g
+       JOIN LATERAL (
+         ${ITEM_SELECT} WHERE m.rating_key = g.item_key AND m.deleted_at IS NULL
+       ) item ON true
+      ORDER BY g.last_viewed_at DESC
+      LIMIT $2`,
+    [profileId, limit],
+  )
+
+  return rows.map((row) => ({
+    ...toItem(row),
+    viewCount: Number(row.view_count),
+    lastViewedAt: row.last_viewed_at,
+  }))
+}
+
+export interface WatchStats {
+  /** 본 작품 수. 시리즈는 몇 화를 봤든 하나로 센다 */
+  titles: number
+  /** 그중 영화 · 시리즈. 같은 것을 다시 봐도 하나다 */
+  movieTitles: number
+  showTitles: number
+  /** 본 편수. 에피소드 + 영화. 다시 본 것도 센다 */
+  views: number
+  episodes: number
+  /** 최근 30일 편수 */
+  recentViews: number
+  /** 본 것들의 러닝타임 합 */
+  totalMs: number
+  firstViewedAt: Date | null
+  /** 많이 본 장르. 작품 수 기준 — 100화짜리 드라마 하나가 장르를 다 먹지 않게 한다 */
+  genres: { name: string; count: number }[]
+}
+
+export async function getWatchStats(profileId: number): Promise<WatchStats> {
+  const [totals, genres] = await Promise.all([
+    queryOne<{
+      titles: string
+      movie_titles: string
+      show_titles: string
+      views: string
+      episodes: string
+      recent_views: string
+      total_ms: string
+      first_viewed_at: Date | null
+    }>(
+      `WITH mine AS (
+         SELECT h.type, h.viewed_at,
+                coalesce(h.show_rating_key, h.rating_key) AS item_key,
+                coalesce(e.duration_ms, m.duration_ms) AS duration_ms
+           FROM watch_history h
+           LEFT JOIN episode e
+             ON h.type = 'episode' AND e.rating_key = h.rating_key AND e.deleted_at IS NULL
+           LEFT JOIN media_item m
+             ON h.type = 'movie' AND m.rating_key = h.rating_key AND m.deleted_at IS NULL
+          WHERE h.plex_account_id = (SELECT plex_account_id FROM profile WHERE id = $1)
+            -- 둘 중 하나에 붙지 않았다면 라이브러리에 없는 것이다
+            AND (e.rating_key IS NOT NULL OR m.rating_key IS NOT NULL)
+       )
+       SELECT count(DISTINCT item_key) AS titles,
+              count(DISTINCT item_key) FILTER (WHERE type = 'movie') AS movie_titles,
+              count(DISTINCT item_key) FILTER (WHERE type = 'episode') AS show_titles,
+              count(*) AS views,
+              count(*) FILTER (WHERE type = 'episode') AS episodes,
+              count(*) FILTER (WHERE viewed_at >= now() - interval '30 days') AS recent_views,
+              coalesce(sum(duration_ms), 0) AS total_ms,
+              min(viewed_at) AS first_viewed_at
+         FROM mine`,
+      [profileId],
+    ),
+    query<{ name: string; count: number }>(
+      `SELECT g.name, count(DISTINCT mi.rating_key)::int AS count
+         FROM watch_history h
+         JOIN media_item mi
+           ON mi.rating_key = coalesce(h.show_rating_key, h.rating_key)
+          AND mi.deleted_at IS NULL
+         JOIN media_item_genre mg ON mg.rating_key = mi.rating_key
+         JOIN genre g ON g.id = mg.genre_id
+        WHERE h.plex_account_id = (SELECT plex_account_id FROM profile WHERE id = $1)
+        GROUP BY g.name
+        ORDER BY count DESC, g.name
+        LIMIT 10`,
+      [profileId],
+    ),
+  ])
+
+  return {
+    titles: Number(totals?.titles ?? 0),
+    movieTitles: Number(totals?.movie_titles ?? 0),
+    showTitles: Number(totals?.show_titles ?? 0),
+    views: Number(totals?.views ?? 0),
+    episodes: Number(totals?.episodes ?? 0),
+    recentViews: Number(totals?.recent_views ?? 0),
+    totalMs: Number(totals?.total_ms ?? 0),
+    firstViewedAt: totals?.first_viewed_at ?? null,
+    genres,
+  }
+}
+
+/** AI 에 넘길 만큼만 줄인 작품 한 줄. 포스터 · 줄거리까지 보낼 이유가 없다. */
+export interface TasteCandidate {
+  ratingKey: string
+  type: 'movie' | 'show'
+  title: string
+  year: number | null
+  genres: string[]
+}
+
+/**
+ * 추천 후보 — **아직 안 본 작품 중에서만** 고른다.
+ *
+ * LLM 이 아는 작품을 자유롭게 말하면 우리 라이브러리에 없는 것을 추천한다. 그래서
+ * 후보를 여기서 먼저 추려 그 목록만 넘기고, 답으로 온 것도 이 안에 있는지 다시 확인한다.
+ * 차례는 "이 사람이 많이 본 장르와 겹치는 정도 → 평점 → 최근 추가" 순이다.
+ */
+export async function getTasteCandidates(profileId: number, limit = 40): Promise<TasteCandidate[]> {
+  const rows = await query<{
+    rating_key: string
+    type: 'movie' | 'show'
+    title: string
+    year: number | null
+    genres: string[] | null
+  }>(
+    `WITH mine AS (
+       SELECT DISTINCT coalesce(h.show_rating_key, h.rating_key) AS item_key
+         FROM watch_history h
+        WHERE h.plex_account_id = (SELECT plex_account_id FROM profile WHERE id = $1)
+     ),
+     taste AS (
+       -- 이 사람이 본 작품들의 장르마다 몇 편을 봤는가
+       SELECT mg.genre_id, count(*)::int AS weight
+         FROM mine
+         JOIN media_item_genre mg ON mg.rating_key = mine.item_key
+        GROUP BY mg.genre_id
+     )
+     SELECT m.rating_key, m.type, m.title, m.year,
+            ARRAY(
+              SELECT g.name FROM media_item_genre mg2
+                JOIN genre g ON g.id = mg2.genre_id
+               WHERE mg2.rating_key = m.rating_key
+               ORDER BY mg2.sort_order
+            ) AS genres,
+            coalesce(sum(t.weight), 0) AS score
+       FROM media_item m
+       LEFT JOIN media_item_genre mg ON mg.rating_key = m.rating_key
+       LEFT JOIN taste t ON t.genre_id = mg.genre_id
+      WHERE m.deleted_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM mine WHERE mine.item_key = m.rating_key)
+      GROUP BY m.rating_key
+      ORDER BY score DESC,
+               coalesce(m.audience_rating, m.critic_rating, 0) DESC,
+               m.plex_added_at DESC NULLS LAST
+      LIMIT $2`,
+    [profileId, limit],
+  )
+
+  return rows.map((row) => ({
+    ratingKey: row.rating_key,
+    type: row.type,
+    title: row.title,
+    year: row.year,
+    genres: row.genres?.filter(Boolean) ?? [],
+  }))
+}
+
+/** 키 목록으로 작품을 가져온다. 넘긴 차례를 그대로 지킨다 — 추천 순서가 곧 의미다. */
+export async function getItemsByKeys(ratingKeys: string[]): Promise<LibraryItem[]> {
+  if (ratingKeys.length === 0) return []
+
+  const rows = await query<ItemRow>(
+    `${ITEM_SELECT} WHERE m.rating_key = ANY($1) AND m.deleted_at IS NULL`,
+    [ratingKeys],
+  )
+  const byKey = new Map(rows.map((row) => [row.rating_key, toItem(row)]))
+  return ratingKeys.map((key) => byKey.get(key)).filter((item): item is LibraryItem => Boolean(item))
+}
+
 // --- 연재 중인 시리즈 (관리자가 고른다) --------------------------------------
 //
 // Plex 는 "지금 연재 중인가" 를 모른다. media_item 에 컬럼을 붙이면 sync 가 덮어쓰므로

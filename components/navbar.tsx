@@ -11,6 +11,7 @@ import {
   Search,
   ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LibrarySection } from '@/lib/library'
@@ -208,9 +209,25 @@ export function Navbar({
               /* z-10 이 없으면 아래 분류 줄이 DOM 순서상 뒤라 팝업 위에 겹쳐 찍힌다 */
               <div className="absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-2xl">
                 {profile ? (
-                  <p className="truncate px-4 py-2 text-sm font-semibold text-foreground">
-                    {profile.name}
-                  </p>
+                  <>
+                    <p className="truncate px-4 py-2 text-sm font-semibold text-foreground">
+                      {profile.name}
+                    </p>
+                    {/* 내 공간 — 시청 목록 · 통계 · 취향 요약. 프로필이 있어야 볼 것이
+                        생기므로 프로필이 있을 때만 둔다 */}
+                    <Link
+                      href="/space"
+                      className={cn(
+                        'flex w-full items-center gap-2 px-4 py-2 text-sm transition hover:bg-secondary',
+                        pathname === '/space'
+                          ? 'text-primary'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      내 공간
+                    </Link>
+                  </>
                 ) : null}
                 {/* 홈 줄 순서. 홈이 아닌 화면에서도 열 수 있어야 나중에 찾기 쉽다 */}
                 <button

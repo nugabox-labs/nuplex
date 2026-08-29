@@ -9,6 +9,7 @@ const TABS = [
   { key: 'notices', href: '/admin/notices', label: '알림' },
   { key: 'featured', href: '/admin/featured', label: '연재' },
   { key: 'profiles', href: '/admin/profiles', label: '프로필' },
+  { key: 'ai', href: '/admin/ai', label: 'AI' },
 ]
 
 export async function AdminNav({ current }: { current: string }) {
