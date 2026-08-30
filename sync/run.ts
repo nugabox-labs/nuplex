@@ -27,6 +27,7 @@ import {
   writeState,
   type ImageCounter,
 } from './upsert'
+import { refreshTastes } from './taste'
 
 // 동기화 한 번. 두 가지 종류가 있다.
 //
@@ -137,6 +138,18 @@ export async function runSync(kind: SyncKind): Promise<SyncResult> {
       }
     } catch (error) {
       console.error('[sync] 시청 기록을 받지 못했습니다:', error)
+    }
+
+    // 취향 분석. 시청 기록이 바뀐 사람만 다시 돈다 — 화면은 담긴 것을 읽기만 하므로
+    // 여기서 미리 만들어 두지 않으면 아무도 못 본다(sync/taste.ts).
+    // 여기서 실패해도 라이브러리 동기화까지 막을 이유는 없다.
+    try {
+      const taste = await refreshTastes()
+      if (taste.done > 0 || taste.failed > 0) {
+        console.log(`[sync] 취향 분석 ${taste.done}명 갱신 · ${taste.failed}명 실패`)
+      }
+    } catch (error) {
+      console.error('[sync] 취향 분석에 실패했습니다:', error)
     }
 
     const sections = (await fetchSections(env)).filter(

@@ -1,12 +1,12 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { Clock, Eye, Film, Tv } from 'lucide-react'
-import { TasteCard, type TasteView } from '@/components/taste-card'
+import { TasteCard } from '@/components/taste-card'
 import { WatchedList } from '@/components/watched-list'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
-import { getCachedTaste } from '@/lib/ai/taste'
 import { formatDuration, formatRelativeTime } from '@/lib/format'
-import { getWatchStats, getWatchedItems } from '@/lib/library'
+import { getTaste, getWatchedItems } from '@/lib/library'
+import { getWatchStats } from '@/lib/watch'
 
 export const metadata: Metadata = { title: '내 취향' }
 export const dynamic = 'force-dynamic'
@@ -29,15 +29,12 @@ export default async function SpacePage() {
 
   // 취향 카드는 담아둔 것만 서버에서 읽는다. 새로 만드는 일(30초~1분)은 화면이 뜬 뒤
   // 클라이언트가 /api/space/taste 로 맡는다 — 여기서 기다리면 화면이 통째로 늦는다.
-  const [stats, watched, cachedTaste] = await Promise.all([
+  // 취향 분석은 sync 워커가 미리 만들어 둔다. 화면은 담긴 것을 읽기만 한다.
+  const [stats, watched, taste] = await Promise.all([
     getWatchStats(profileId),
     getWatchedItems(profileId, LIST_LIMIT),
-    getCachedTaste(profileId).catch(() => null),
+    getTaste(profileId).catch(() => null),
   ])
-
-  const initialTaste: TasteView | null = cachedTaste
-    ? { summary: cachedTaste.summary, tags: cachedTaste.tags }
-    : null
 
   const topGenres = stats.genres.slice(0, GENRE_TOP)
 
@@ -51,7 +48,7 @@ export default async function SpacePage() {
         </Empty>
       ) : (
         <div className="space-y-12">
-          <TasteCard initial={initialTaste} />
+          {taste ? <TasteCard summary={taste.summary} tags={taste.tags} /> : null}
 
           {/* --- 내 시청 기록 — 왼쪽에 숫자 넷, 오른쪽에 장르 차트 --- */}
           <section>

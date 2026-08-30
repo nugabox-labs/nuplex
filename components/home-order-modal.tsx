@@ -11,6 +11,7 @@ import {
   Loader2,
   RotateCcw,
   SlidersHorizontal,
+  Sparkles,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,12 @@ export interface OrderableRow {
   key: string
   title: string
 }
+
+/**
+ * 취향 줄을 켜고 끄는 열쇠. lib/library.ts 의 TASTE_ROW_KEY 와 같은 값이다 —
+ * 이 파일은 클라이언트라 'server-only' 인 그 모듈을 import 할 수 없어 값만 맞춰 둔다.
+ */
+const TASTE_ROW_KEY = 'taste'
 
 /** 저장된 차례를 실제 줄 목록에 입힌다. 목록에 없는 줄은 원래 자리 뒤에 붙는다. */
 function applyOrder(rows: OrderableRow[], order: string[] | null): OrderableRow[] {
@@ -151,10 +158,42 @@ export function HomeOrderModal({
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <p className="text-sm text-muted-foreground">
-                홈에 줄이 나오는 차례입니다. "이어서 보기" 만 맨 위에 고정이고, 나머지는
-                순서를 바꿀 수 있습니다. 라이브러리 줄은 눈 아이콘으로 숨길 수 있습니다.
+                홈에 줄이 나오는 차례입니다. 맨 위 두 줄(보고 있던 작품 · 볼 만한 작품)만
+                자리가 고정이고, 나머지는 순서를 바꿀 수 있습니다. 라이브러리 줄은 눈
+                아이콘으로 숨길 수 있습니다.
               </p>
               {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
+
+              {/* 취향 줄은 차례를 바꾸는 대상이 아니라 통째로 켜고 끄는 것이라 따로 둔다 */}
+              <button
+                type="button"
+                onClick={() => toggleHidden(TASTE_ROW_KEY)}
+                aria-pressed={!hidden.includes(TASTE_ROW_KEY)}
+                className="mt-4 flex w-full items-center gap-3 rounded-lg border border-border bg-secondary/40 px-4 py-3 text-left transition hover:bg-secondary/70"
+              >
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-foreground">
+                    내 취향 추천 작품 보기
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    끄면 "볼 만한 작품" 과 장르별 추천 줄이 홈에서 모두 빠집니다
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    'relative h-6 w-11 shrink-0 rounded-full transition',
+                    hidden.includes(TASTE_ROW_KEY) ? 'bg-border' : 'bg-primary',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0.5 h-5 w-5 rounded-full bg-background transition-all',
+                      hidden.includes(TASTE_ROW_KEY) ? 'left-0.5' : 'left-[1.375rem]',
+                    )}
+                  />
+                </span>
+              </button>
 
               {loading ? (
                 <p className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">

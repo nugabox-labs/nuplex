@@ -5,7 +5,8 @@ import { query, queryOne } from '@/lib/db'
 // OpenAI 호환 API 라 SDK 없이 fetch 로 부른다. 의존성을 하나 더 들이지 않으려는 것이다.
 //
 // **화면을 그리는 길에서 부르지 않는다.** v4 는 전부 추론 모델이라 답 하나에
-// 20~30초가 걸린다(실측). 결과는 profile_taste 에 담아두고 화면이 뜬 뒤에 채운다.
+// 30초~2분이 걸린다(실측 109초). 부르는 곳은 sync 워커 하나뿐이고, 화면은 워커가
+// 담아둔 것을 읽기만 한다 — Plex 를 워커로 몰아넣은 것과 같은 이유다(AGENTS.md §2).
 
 const API_BASE = 'https://api.deepseek.com'
 
@@ -76,7 +77,13 @@ export async function chatJson<T>(options: {
   purpose: string
   system: string
   user: string
-  /** 딥시크가 답을 못 끝내면 여기서 끊는다. 추론 모델이라 넉넉히 둔다 */
+  /**
+   * 딥시크가 답을 못 끝내면 여기서 끊는다.
+   *
+   * 넉넉해 보여도 그렇지 않다 — 취향 분석 한 번이 실제로 109초 걸린 적이 있다.
+   * 추론 모델이라 답 길이에 따라 편차가 크다. 부르는 곳이 sync 워커뿐이라
+   * 오래 기다려도 화면이 늦어지지 않는다.
+   */
   timeoutMs?: number
 }): Promise<T> {
   const apiKey = process.env.DEEPSEEK_API_KEY
@@ -101,7 +108,7 @@ export async function chatJson<T>(options: {
           { role: 'user', content: options.user },
         ],
       }),
-      signal: AbortSignal.timeout(options.timeoutMs ?? 120_000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 240_000),
     })
   } catch (error) {
     // 그물 밖으로 못 나간 경우(타임아웃 · DNS). 응답이 없어 토큰 수도 없다.

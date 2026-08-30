@@ -1,91 +1,40 @@
-import 'server-only'
 import { query, queryOne } from '@/lib/db'
+import { formatDuration } from '@/lib/format'
 import {
-  getItemsByKeys,
+  getGenrePicks,
   getTasteCandidates,
   getWatchStats,
-  getWatchedItems,
-  type LibraryItem,
-} from '@/lib/library'
-import { formatDuration } from '@/lib/format'
-import { getCurrentProfile } from '@/lib/profiles'
+  getWatchedTitles,
+  type GenrePicks,
+} from '@/lib/watch'
 import { AiUnavailableError, chatJson, getModel, hasApiKey } from './deepseek'
 
-// "내 취향" 맨 위에 뜨는 취향 카드 — 무엇을 자주 보는 사람인지, 그래서 무엇을 권하는지.
-// 고른 작품은 홈의 "○○님이 볼 만한 작품" 줄이 된다.
+// 취향 분석 — 무엇을 좋아하는 사람인지 한 문단으로 쓰고, 볼 만한 것을 골라 담아둔다.
 //
-// 두 가지를 지켜야 한다.
+// **이 모듈에는 'server-only' 를 걸지 않는다.** 만드는 일은 sync 워커가 한다
+// (sync/taste.ts). 워커는 Next.js 없이 도는 순수 Node 라 server-only 모듈을 import
+// 하면 즉시 죽는다(AGENTS.md §4). 화면은 담긴 것을 읽기만 한다(lib/library.ts 의 getTaste).
+//
+// 지켜야 할 것 둘.
 //   · **추천은 우리 라이브러리 안에서만.** 후보를 DB 에서 먼저 추려 그 목록만 넘기고,
 //     답으로 온 키가 그 안에 있는지 다시 확인한다. 확인 없이 믿으면 없는 작품을 권한다.
-//   · **화면 그리는 길에서 만들지 않는다.** 한 번에 30초~1분이 걸린다(database/0013_ai.sql).
-//     화면은 담아둔 것을 즉시 그리고, 없을 때만 뜬 뒤에 채운다.
+//   · **화면 그리는 길에서 만들지 않는다.** 한 번에 30초~1분이 걸린다.
 
 /** 한 편만 봤어도 그 장르에서 시작한다. 기록이 0이면 부르지 않는다 — 쓸 재료가 없다 */
 const MIN_VIEWS = 1
-/** 담아둔 뒤 이만큼 더 봤으면 다시 만든다 */
-const RESTALE_VIEWS = 10
 /** 홈 줄 하나를 채울 만큼 고르게 한다 */
 const PICK_COUNT = 10
+/** 장르 줄을 몇 개까지 만들지. 많이 본 장르 순 */
+const GENRE_ROW_COUNT = 5
+/** 장르 줄 하나에 담을 작품 수 */
+const PER_GENRE = 15
+
 /**
- * 프롬프트 · 저장 형식의 판 번호. **말투나 picks 모양을 고치면 반드시 올린다.**
+ * 프롬프트 · 저장 형식의 판 번호. **말투나 저장 모양을 고치면 반드시 올린다.**
  * 담아둔 것이 이 번호와 다르면 낡은 것으로 보고 다시 만든다
  * (database/0015_taste_prompt_version.sql).
  */
-const PROMPT_VERSION = 1
-
-export interface Taste {
-  summary: string
-  tags: string[]
-  /** 홈 줄에 그대로 쓰는 작품들. 고른 차례를 지킨다 */
-  picks: LibraryItem[]
-  model: string
-  createdAt: Date
-}
-
-/** 아직 아무것도 안 봤을 때. 화면은 이때 카드도 줄도 만들지 않는다 */
-export class NotEnoughHistoryError extends Error {}
-
-interface TasteRow {
-  model: string
-  summary: string
-  tags: string[]
-  /** rating_key 배열 */
-  picks: string[]
-  view_count: number
-  prompt_version: number
-  created_at: Date
-}
-
-async function toTaste(row: TasteRow): Promise<Taste> {
-  return {
-    summary: row.summary,
-    tags: row.tags,
-    // 담아둔 뒤 Plex 에서 빠진 작품은 getItemsByKeys 가 조용히 뺀다.
-    picks: await getItemsByKeys(row.picks),
-    model: row.model,
-    createdAt: row.created_at,
-  }
-}
-
-/** 담아둔 것. 없거나 낡았으면 null 이다 — 화면이 그때만 새로 만들자고 부른다. */
-export async function getCachedTaste(profileId: number): Promise<Taste | null> {
-  const row = await queryOne<TasteRow>(
-    `SELECT model, summary, tags, picks, view_count, prompt_version, created_at
-       FROM profile_taste WHERE profile_id = $1`,
-    [profileId],
-  )
-  if (!row) return null
-
-  // 말투나 저장 형식이 바뀐 뒤에 담긴 것이 아니면 버린다.
-  if (row.prompt_version !== PROMPT_VERSION) return null
-  // 관리자가 모델을 바꿨으면 그 모델로 다시 만든다.
-  if (row.model !== (await getModel())) return null
-
-  const stats = await getWatchStats(profileId)
-  if (stats.views - row.view_count >= RESTALE_VIEWS) return null
-
-  return toTaste(row)
-}
+export const TASTE_PROMPT_VERSION = 2
 
 /**
  * 가운데점 앞뒤에 공백을 둔다 — AGENTS.md §2 의 표기 규칙이다.
@@ -103,14 +52,28 @@ interface AiAnswer {
   picks?: unknown
 }
 
-/** 딥시크를 실제로 불러 새로 만든다. 담아두고 돌려준다. */
-export async function generateTaste(profileId: number): Promise<Taste> {
+export interface TasteResult {
+  summary: string
+  tags: string[]
+  picks: string[]
+  genrePicks: GenrePicks[]
+}
+
+/** 아직 아무것도 안 봤을 때. 워커는 이 프로필을 건너뛴다 */
+export class NotEnoughHistoryError extends Error {}
+
+/**
+ * 이 프로필의 취향을 새로 분석해 담아둔다.
+ *
+ * 부르는 곳은 sync 워커 하나뿐이다. 시청 기록이 갱신된 프로필만 골라서 부른다.
+ */
+export async function generateTaste(profileId: number): Promise<TasteResult> {
   if (!hasApiKey()) throw new AiUnavailableError('DEEPSEEK_API_KEY 가 설정되지 않았습니다.')
 
-  const [profile, stats, watched, candidates] = await Promise.all([
-    getCurrentProfile(profileId),
+  const [name, stats, watched, candidates] = await Promise.all([
+    getProfileName(profileId),
     getWatchStats(profileId),
-    getWatchedItems(profileId, 40),
+    getWatchedTitles(profileId, 40),
     // 10편을 고르게 하므로 후보도 넉넉히 준다.
     getTasteCandidates(profileId, 60),
   ])
@@ -118,8 +81,6 @@ export async function generateTaste(profileId: number): Promise<Taste> {
   if (stats.views < MIN_VIEWS) {
     throw new NotEnoughHistoryError('아직 시청 기록이 없습니다.')
   }
-
-  const name = profile?.name ?? '회원'
 
   const watchedLines = watched
     .map((item) => {
@@ -211,26 +172,50 @@ export async function generateTaste(profileId: number): Promise<Taste> {
     picks.push(candidate.ratingKey)
   }
 
+  // 장르별 줄은 SQL 이 만든다 — 이유는 lib/watch.ts 의 getGenrePicks 주석에 있다.
+  const genrePicks = await getGenrePicks(
+    profileId,
+    stats.genres.slice(0, GENRE_ROW_COUNT).map((genre) => genre.name),
+    PER_GENRE,
+  )
+
   const model = await getModel()
 
   await query(
     `INSERT INTO profile_taste
-       (profile_id, model, summary, tags, picks, view_count, prompt_version, created_at)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, now())
+       (profile_id, model, summary, tags, picks, genre_picks, view_count, prompt_version, created_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, now())
        ON CONFLICT (profile_id) DO UPDATE
           SET model = excluded.model, summary = excluded.summary, tags = excluded.tags,
-              picks = excluded.picks, view_count = excluded.view_count,
-              prompt_version = excluded.prompt_version, created_at = excluded.created_at`,
-    [profileId, model, summary, tags, JSON.stringify(picks), stats.views, PROMPT_VERSION],
+              picks = excluded.picks, genre_picks = excluded.genre_picks,
+              view_count = excluded.view_count, prompt_version = excluded.prompt_version,
+              created_at = excluded.created_at`,
+    [
+      profileId,
+      model,
+      summary,
+      tags,
+      JSON.stringify(picks),
+      JSON.stringify(genrePicks),
+      stats.views,
+      TASTE_PROMPT_VERSION,
+    ],
   )
 
-  return toTaste({
-    model,
-    summary,
-    tags,
-    picks,
-    view_count: stats.views,
-    prompt_version: PROMPT_VERSION,
-    created_at: new Date(),
-  })
+  return { summary, tags, picks, genrePicks }
+}
+
+/** 표시 이름. lib/profiles.ts 는 'server-only' 라 워커가 못 쓴다 — 규칙만 같게 둔다. */
+async function getProfileName(profileId: number): Promise<string> {
+  const row = await queryOne<{ name: string }>(
+    `SELECT coalesce(
+              nullif(btrim(p.display_name), ''), nullif(btrim(a.name), ''),
+              nullif(btrim(a.username), ''), '회원'
+            ) AS name
+       FROM profile p
+       LEFT JOIN plex_account a ON a.id = p.plex_account_id
+      WHERE p.id = $1`,
+    [profileId],
+  )
+  return row?.name ?? '회원'
 }
