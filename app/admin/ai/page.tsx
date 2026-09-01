@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 
 export default function AdminAiPage() {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10 md:px-8">
+    <main className="page-safe mx-auto max-w-3xl px-4 md:px-8">
       <AdminNav current="ai" />
       <AiAdmin />
     </main>

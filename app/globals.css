@@ -157,6 +157,26 @@
     padding-top: calc(2.5rem + env(safe-area-inset-top));
     padding-bottom: calc(2.5rem + env(safe-area-inset-bottom));
   }
+  /* 입력칸을 누를 때 화면이 확대되는 것을 막는다.
+
+     iOS 는 글자가 **16px 보다 작은** 입력칸에 포커스가 가면 읽으라고 화면을 당겨
+     확대한다. 그리고 포커스를 잃어도 되돌려 주지 않는다 — 관리자 화면이 옆으로
+     잘린 채 남던 원인이다. 관리자 입력칸은 대부분 `text-sm`(14px) 이라 전부 걸린다.
+
+     각 입력칸의 클래스를 하나씩 고치는 대신 여기서 한 번에 못박는다. 새로 만드는
+     화면이 또 `text-sm` 을 쓰더라도 다시 재발하지 않아야 한다.
+
+     `viewport` 의 maximumScale 과 짝이다(app/layout.tsx) — Safari 는 그 값을
+     무시하므로 이 규칙이 없으면 브라우저에서 그대로 확대된다.
+     큰 화면은 손댈 이유가 없어 좁은 화면에만 건다. */
+  @media (max-width: 1023px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;

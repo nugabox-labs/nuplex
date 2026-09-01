@@ -58,6 +58,16 @@ export const viewport: Viewport = {
   // 이걸 켰으면 화면 가장자리에 붙는 UI 는 env(safe-area-inset-*) 로 여백을 줘야
   // 잘리지 않는다 (docs/APP-INTEGRATION.md §2).
   viewportFit: 'cover',
+  // 입력칸을 누를 때 화면이 확대되는 것을 막는다. iOS 는 글자가 16px 보다 작은
+  // 입력칸에 포커스가 가면 알아서 확대하고, 빠져나와도 되돌리지 않아 화면이
+  // 잘린 채로 남는다. 관리자 화면처럼 입력칸이 많은 곳에서 특히 거슬린다.
+  //
+  // 이것만으로는 부족하다 — WKWebView 는 이 값을 지키지만 **Safari 는 무시한다.**
+  // 그래서 app/globals.css 에서 입력칸 글자를 16px 로 못박는 것과 짝을 이룬다.
+  // 둘 중 하나만 두면 한쪽 환경에서 그대로 확대된다.
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({

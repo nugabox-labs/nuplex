@@ -75,6 +75,16 @@ export function Navbar({
   // 나가면 프로필 고르는 화면으로 돌아간다. 프로필 쿠키가 곧 관문이라
   // 다시 들어오려면 그 사람의 이메일을 한 번 더 확인하게 된다.
   async function leave() {
+    // 앱 셸의 푸시 등록을 **세션이 살아 있는 동안** 먼저 푼다. 로그아웃 뒤에 부르면
+    // DELETE /api/app/push/token 이 401 이라 기기가 등록된 채로 남는다. 그러면 다음
+    // 사람이 이 기기로 들어와도 이전 사람 앞으로 온 공지가 계속 이 기기로 온다
+    // (nuplex-app/docs/plan/active/phase-9-push-badge.md 결함 D).
+    const native = (window as unknown as { NuplexNative?: { clearPushRegistration?: () => Promise<void> } })
+      .NuplexNative
+    if (native?.clearPushRegistration) {
+      // 실패해도 로그아웃은 그대로 진행한다 — 못 나가는 것이 더 나쁘다.
+      await native.clearPushRegistration().catch(() => {})
+    }
     await fetch('/api/auth/logout', { method: 'POST' })
     // 쿠키를 지웠으니 전체 페이지 이동으로 서버가 다시 판단하게 한다.
     window.location.assign('/profile')
