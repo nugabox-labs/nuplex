@@ -1,5 +1,6 @@
 import cron from 'node-cron'
 import { queryOne } from '@/lib/db'
+import { takeSyncRequest } from '@/lib/sync-request'
 import { runSync, type SyncKind } from './run'
 
 // 상주 워커. 이 컨테이너만 Plex 토큰을 쥔다.
@@ -7,10 +8,15 @@ import { runSync, type SyncKind } from './run'
 //   증분 — 기본 30분마다 (SYNC_INCREMENTAL_CRON)
 //   전체 — 기본 매일 04:05 KST (SYNC_FULL_CRON)
 //
+// 관리자 화면의 "지금 동기화" 버튼도 여기로 들어온다. web 은 Plex 를 못 부르므로
+// 버튼은 DB 에 쪽지만 남기고, 아래 폴링이 그걸 집어 온다(lib/sync-request.ts).
+//
 // 기동 시 성공 이력이 하나도 없으면 곧바로 전체 동기화를 한 번 돌린다.
 // 최초 배포 후 사람이 따로 뭘 치지 않아도 화면이 채워지게 하려는 것이다.
 
 const TIMEZONE = process.env.TZ || 'Asia/Seoul'
+// 버튼을 누른 사람이 기다리는 시간이다. 짧게 둔다 — 쪽지 확인은 질의 한 번이라 거의 공짜다.
+const REQUEST_POLL_MS = 10_000
 
 // 두 스케줄이 겹치면 같은 항목에 동시에 쓰게 된다. 한 번에 하나만 돌린다.
 let running = false
@@ -52,6 +58,17 @@ async function safeRun(kind: SyncKind) {
   }
 }
 
+/** 관리자가 남긴 수동 동기화 요청을 집어 온다. */
+async function checkRequest() {
+  // 이미 돌고 있으면 쪽지를 그대로 둔다. 다음 차례에 집으면 된다 —
+  // 여기서 지워 버리면 버튼을 눌렀는데 아무 일도 안 일어난 것이 된다.
+  if (running) return
+  const kind = await takeSyncRequest().catch(() => null)
+  if (!kind) return
+  console.log(`[sync] 관리자 요청 — ${kind} 동기화를 시작합니다`)
+  await safeRun(kind)
+}
+
 async function main() {
   const incrementalCron = process.env.SYNC_INCREMENTAL_CRON || '*/30 * * * *'
   // 04:00 정각이 아니라 04:05 다. 정각은 30분 증분과 매번 부딪힌다 — 위 fullPending 이
@@ -61,7 +78,12 @@ async function main() {
   cron.schedule(incrementalCron, () => void safeRun('incremental'), { timezone: TIMEZONE })
   cron.schedule(fullCron, () => void safeRun('full'), { timezone: TIMEZONE })
 
-  console.log(`[sync] 워커 시작 — 증분 "${incrementalCron}" · 전체 "${fullCron}" (${TIMEZONE})`)
+  setInterval(() => void checkRequest(), REQUEST_POLL_MS)
+
+  console.log(
+    `[sync] 워커 시작 — 증분 "${incrementalCron}" · 전체 "${fullCron}" (${TIMEZONE}) · ` +
+      `수동 요청 확인 ${REQUEST_POLL_MS / 1000}초마다`,
+  )
 
   const succeeded = await queryOne<{ id: string }>(
     `SELECT id FROM sync_run WHERE status = 'ok' LIMIT 1`,

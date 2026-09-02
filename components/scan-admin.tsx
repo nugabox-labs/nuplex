@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw, Star } from 'lucide-react'
 import { SectionTitle } from '@/components/section-title'
+import { formatElapsed } from '@/lib/format'
+import type { ScanRun } from '@/lib/scan'
 import { cn } from '@/lib/utils'
 
 // Plex 라이브러리 파일 스캔. Plex 화면에서 하나씩 누르던 일을 여기서 한다.
@@ -21,6 +23,7 @@ export function ScanAdmin() {
   const [sections, setSections] = useState<Section[]>([])
   const [favorites, setFavorites] = useState<number[]>([])
   const [scanning, setScanning] = useState<number[]>([])
+  const [history, setHistory] = useState<ScanRun[]>([])
   // 대기줄. 맨 앞이 지금 시작을 요청 중이거나 Plex 가 훑고 있는 것이다.
   const [queue, setQueue] = useState<number[]>([])
   const [running, setRunning] = useState<number | null>(null)
@@ -40,10 +43,12 @@ export function ScanAdmin() {
       sections: Section[]
       favorites: number[]
       scanning: number[]
+      history: ScanRun[]
     }
     setSections(data.sections)
     setFavorites(data.favorites)
     setScanning(data.scanning)
+    setHistory(data.history)
     setLoading(false)
   }, [])
 
@@ -210,6 +215,67 @@ export function ScanAdmin() {
           )
         })}
       </ul>
+
+      <div className="border-t border-border/60 pt-6">
+        <h2 className="mb-3 text-sm font-bold text-foreground">스캔 이력</h2>
+        {history.length === 0 ? (
+          <p className="text-sm text-muted-foreground">아직 스캔한 기록이 없습니다.</p>
+        ) : (
+          <ul className="divide-y divide-border/60 text-sm">
+            {history.map((run) => (
+              <li
+                key={`${run.startedAt}:${run.sectionId}`}
+                className="flex items-center gap-3 py-2"
+              >
+                <span className="w-32 shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {formatStartedAt(run.startedAt)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-foreground">
+                  <SectionTitle title={run.title} />
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 text-xs',
+                    run.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+                    run.status === 'running' && 'text-primary',
+                  )}
+                >
+                  {statusLabel(run.status)}
+                </span>
+                <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {elapsedOf(run) ?? ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          최근 20건만 남깁니다. 걸린 시간은 Plex 가 이 라이브러리를 훑고 있다고 답하는 동안을
+          잰 것이라 몇 초 안팎의 오차가 있습니다.
+        </p>
+      </div>
     </div>
   )
+}
+
+function statusLabel(status: ScanRun['status']): string {
+  if (status === 'running') return '스캔 중'
+  return status === 'failed' ? '실패' : '완료'
+}
+
+/** "09-02 14:03" — 이력은 목록이라 상대 시각보다 실제 시각이 읽기 좋다. */
+function formatStartedAt(value: string): string {
+  return new Date(value).toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+function elapsedOf(run: ScanRun): string | null {
+  if (!run.finishedAt) return null
+  return formatElapsed(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime())
 }

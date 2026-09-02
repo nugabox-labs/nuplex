@@ -51,3 +51,17 @@ export function formatRelativeTime(value: Date | string): string {
   }
   return date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
 }
+
+/** "2분 34초" 같은 소요 시간 표기. 스캔 · 동기화가 얼마나 걸렸는지 보여줄 때 쓴다. */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds}초`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) {
+    const rest = seconds % 60
+    return rest === 0 ? `${minutes}분` : `${minutes}분 ${rest}초`
+  }
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `${hours}시간` : `${hours}시간 ${rest}분`
+}
