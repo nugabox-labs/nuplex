@@ -1,8 +1,15 @@
 import Link from 'next/link'
 import { CollectionRow } from '@/components/collection-row'
+import { ContentRow } from '@/components/content-row'
 import { MovieCard } from '@/components/movie-card'
 import { SectionTitle } from '@/components/section-title'
-import { listItems, listShuffledCollections, type SortKey } from '@/lib/library'
+import {
+  getPopular,
+  getRecentlyAdded,
+  listItems,
+  listShuffledCollections,
+  type SortKey,
+} from '@/lib/library'
 
 // 영화 · 시리즈 목록 화면. 두 페이지가 정렬 · 페이지네이션까지 똑같이 쓰므로 하나로 둔다.
 
@@ -33,18 +40,20 @@ export async function LibraryBrowser({
   const sort: SortKey = isSortKey(searchParams.sort) ? searchParams.sort : 'added'
   const page = Math.max(1, Number(searchParams.page) || 1)
 
-  const [{ items, total }, collections] = await Promise.all([
+  // 맨 위 두 줄과 컬렉션 띠는 첫 페이지에만 보여준다. 2페이지부터도 계속 나오면 거슬린다.
+  const [{ items, total }, collections, recent, popular] = await Promise.all([
     listItems({ sectionId, sort, page, pageSize: PAGE_SIZE }),
-    // 컬렉션 띠는 첫 페이지에만 보여준다. 2페이지부터도 계속 나오면 거슬린다.
     // 홈과 마찬가지로 들어올 때마다 섞는다 — 뒤쪽 모음도 눈에 걸리게.
     page === 1 ? listShuffledCollections(sectionId) : Promise.resolve([]),
+    page === 1 ? getRecentlyAdded(sectionId) : Promise.resolve([]),
+    page === 1 ? getPopular(sectionId) : Promise.resolve([]),
   ])
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
     <div className="page-top pb-20">
       {/* 화면의 뼈대는 어느 분류에서나 같다 —
-            분류 이름 → 시리즈 모음 → 전체 작품 + 정렬 → 그리드.
+            분류 이름 → 최근 추가 → 인기 → 시리즈 모음 → 전체 작품 + 정렬 → 그리드.
 
           컬렉션이 있고 없고에 따라 첫 줄이 달라지면 같은 성격의 화면인데도
           매번 다시 읽어야 한다. 그래서 시리즈 모음이 없는 분류에서도 소제목과
@@ -57,6 +66,21 @@ export async function LibraryBrowser({
         <h1 className="mb-6 text-2xl font-bold text-foreground md:text-3xl">
           <SectionTitle title={heading} />
         </h1>
+
+      {/* 가로 줄들은 화면 끝까지 흐르게 둔다. 안쪽 여백은 줄 컴포넌트가 스스로 가진다. */}
+      {recent.length > 0 ? (
+        <div className="mb-4 -mx-4 md:-mx-8">
+          <ContentRow row={{ key: 'section-recent', title: '최근 추가된 작품', items: recent }} />
+        </div>
+      ) : null}
+
+      {popular.length > 0 ? (
+        <div className="mb-4 -mx-4 md:-mx-8">
+          <ContentRow
+            row={{ key: 'section-popular', title: '가장 인기있는 작품', items: popular }}
+          />
+        </div>
+      ) : null}
 
       {collections.length > 0 ? (
         <div className="mb-8 -mx-4 md:-mx-8">

@@ -27,6 +27,7 @@ import {
   writeState,
   type ImageCounter,
 } from './upsert'
+import { refreshPopularity } from './popularity'
 import { refreshTastes } from './taste'
 
 // 동기화 한 번. 두 가지 종류가 있다.
@@ -138,6 +139,15 @@ export async function runSync(kind: SyncKind): Promise<SyncResult> {
       }
     } catch (error) {
       console.error('[sync] 시청 기록을 받지 못했습니다:', error)
+    }
+
+    // 인기 점수. 방금 받은 시청 기록으로 다시 센다 — Plex 를 부르지 않는 산정이라 싸다.
+    // 여기서 실패해도 라이브러리 동기화까지 막을 이유는 없다 — 줄 하나가 어제 값으로 남을 뿐이다.
+    try {
+      const updated = await refreshPopularity()
+      if (updated > 0) console.log(`[sync] 인기 점수 ${updated}건 갱신`)
+    } catch (error) {
+      console.error('[sync] 인기 점수를 세지 못했습니다:', error)
     }
 
     // 취향 분석. 시청 기록이 바뀐 사람만 다시 돈다 — 화면은 담긴 것을 읽기만 하므로

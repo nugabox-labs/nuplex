@@ -467,16 +467,133 @@ export function sortSectionsForHome(sections: LibrarySection[]): LibrarySection[
   return [...sections].sort((a, b) => homeOrderIndex(a.title) - homeOrderIndex(b.title))
 }
 
-export async function getHomeRows(): Promise<LibraryRow[]> {
-  const [recent, sections] = await Promise.all([
-    query<ItemRow>(
-      `${ITEM_SELECT}
-        WHERE m.deleted_at IS NULL
-        ORDER BY m.plex_added_at DESC NULLS LAST LIMIT $1`,
-      [ROW_SIZE],
+/**
+ * "최근 추가된 작품".
+ *
+ * 영화는 작품 그대로지만 **시리즈는 시즌 카드**다. 시리즈는 통째로 새로 들어오는 일보다
+ * 새 화가 붙는 일이 훨씬 잦은데, 작품 단위로만 보면 그게 화면에 전혀 안 나타난다
+ * (`media_item.plex_added_at` 은 시리즈를 처음 받은 날 그대로다). 그래서 시리즈는
+ * "그 시즌에 마지막으로 들어온 화" 를 시각으로 삼고, 포스터 · 이름도 시즌 것을 쓴다.
+ *
+ * 작품 카드와 시즌 카드를 같이 내보내지 않는다 — 시리즈 하나가 두 번 나오면 줄이
+ * 금세 같은 작품으로 찬다. 새로 들어온 시리즈는 "시즌 1" 로 보인다.
+ *
+ * 시즌 카드 만드는 법은 "연재 중인 시즌"(getFeaturedSeries)과 같다.
+ */
+export async function getRecentlyAdded(
+  sectionId?: number,
+  limit = ROW_SIZE,
+): Promise<LibraryItem[]> {
+  const section = sectionId ?? null
+
+  const [movies, seasons] = await Promise.all([
+    query<ItemRow & { added_at: Date | null }>(
+      // 추가 시각은 ITEM_SELECT 에 없다. 시즌 쪽과 같은 자로 재야 하므로 따로 붙인다.
+      `SELECT item.*, mi.plex_added_at AS added_at
+         FROM (${ITEM_SELECT}
+                WHERE m.deleted_at IS NULL AND m.type = 'movie'
+                  AND ($1::int IS NULL OR m.section_id = $1)
+              ) item
+         JOIN media_item mi ON mi.rating_key = item.rating_key
+        ORDER BY mi.plex_added_at DESC NULLS LAST
+        LIMIT $2`,
+      [section, limit],
     ),
-    getSections(),
+    query<
+      ItemRow & {
+        added_at: Date | null
+        season_rating_key: string
+        season_title: string
+        season_index: number | null
+        season_poster_file: string | null
+        season_first_episode: string | null
+      }
+    >(
+      // 시즌을 먼저 좁힌 뒤에 작품 정보를 붙인다. 순서를 뒤집으면 분류 안의
+      // 모든 시리즈에 대해 ITEM_SELECT 의 "첫 화 찾기" 가 돌아간다.
+      `WITH season_added AS (
+         SELECT se.rating_key, se.show_rating_key, se.title, se.season_index, se.poster_file,
+                MAX(e.plex_added_at) AS added_at
+           FROM season se
+           JOIN media_item show ON show.rating_key = se.show_rating_key
+            AND show.deleted_at IS NULL
+            AND ($1::int IS NULL OR show.section_id = $1)
+           JOIN episode e ON e.season_rating_key = se.rating_key AND e.deleted_at IS NULL
+          WHERE se.deleted_at IS NULL
+          GROUP BY se.rating_key
+       ),
+       -- 시리즈당 가장 최근 시즌 한 장만. 시리즈가 통째로 들어오면 모든 시즌의 추가 시각이
+       -- 같아서, 안 그러면 줄 하나가 그 시리즈의 시즌 목록이 되어 버린다.
+       newest AS (
+         SELECT DISTINCT ON (show_rating_key) *
+           FROM season_added
+          ORDER BY show_rating_key, added_at DESC NULLS LAST
+       ),
+       top_seasons AS (
+         SELECT * FROM newest ORDER BY added_at DESC NULLS LAST LIMIT $2
+       )
+       SELECT item.*, sa.added_at,
+              sa.rating_key AS season_rating_key, sa.title AS season_title,
+              sa.season_index, sa.poster_file AS season_poster_file,
+              (
+                SELECT e.rating_key FROM episode e
+                 WHERE e.season_rating_key = sa.rating_key AND e.deleted_at IS NULL
+                   AND e.episode_index IS NOT NULL
+                 ORDER BY e.episode_index LIMIT 1
+              ) AS season_first_episode
+         FROM top_seasons sa
+         JOIN (${ITEM_SELECT} WHERE m.deleted_at IS NULL) item
+           ON item.rating_key = sa.show_rating_key
+        ORDER BY sa.added_at DESC NULLS LAST`,
+      [section, limit],
+    ),
   ])
+
+  const cards = [
+    ...movies.map((row) => ({ addedAt: row.added_at, item: toItem(row) })),
+    ...seasons.map((row) => ({
+      addedAt: row.added_at,
+      item: {
+        ...toItem(row),
+        // 카드 하나가 시즌 하나다. 링크만 작품 상세로 돌린다.
+        ratingKey: row.season_rating_key,
+        href: `/title/${row.rating_key}`,
+        poster: mediaUrl(row.season_poster_file) ?? mediaUrl(row.poster_file),
+        // 시즌 이름이 "시즌 1" 일 수 있어 작품명은 제목 자리에 그대로 둔다.
+        badge: seasonLabel(row.season_title, row.season_index),
+        plexUrl: plexDeepLink(row.season_rating_key),
+        playUrl: plexDeepLink(
+          row.season_first_episode ?? row.first_episode_rating_key ?? row.rating_key,
+        ),
+        playType:
+          row.season_first_episode || row.first_episode_rating_key ? 'episode' : row.type,
+      } satisfies LibraryItem,
+    })),
+  ]
+
+  cards.sort((a, b) => (b.addedAt?.getTime() ?? 0) - (a.addedAt?.getTime() ?? 0))
+  return cards.slice(0, limit).map((card) => card.item)
+}
+
+/**
+ * "가장 인기있는 작품" — 본 사람이 많은 순(database/0017_popularity.sql).
+ * 점수는 sync 워커가 시청 기록에서 세어 둔다. 여기서는 읽기만 한다.
+ * 아무도 안 본 작품은 넣지 않는다 — 0점끼리 줄 세우면 그냥 최근 추가순이 된다.
+ */
+export async function getPopular(sectionId?: number, limit = ROW_SIZE): Promise<LibraryItem[]> {
+  const rows = await query<ItemRow>(
+    `${ITEM_SELECT}
+      WHERE m.deleted_at IS NULL AND m.popularity > 0
+        AND ($1::int IS NULL OR m.section_id = $1)
+      ORDER BY m.popularity DESC, m.plex_added_at DESC NULLS LAST
+      LIMIT $2`,
+    [sectionId ?? null, limit],
+  )
+  return rows.map(toItem)
+}
+
+export async function getHomeRows(): Promise<LibraryRow[]> {
+  const [recent, sections] = await Promise.all([getRecentlyAdded(), getSections()])
 
   const sectionRows = await Promise.all(
     sections.map(async (section) => ({
@@ -497,7 +614,7 @@ export async function getHomeRows(): Promise<LibraryRow[]> {
   sectionRows.sort((a, b) => homeOrderIndex(a.title) - homeOrderIndex(b.title))
 
   return [
-    { key: 'recent', title: '최근 추가된 작품', items: recent.map(toItem) },
+    { key: 'recent', title: '최근 추가된 작품', items: recent },
     ...sectionRows,
   ].filter(
     (row) => row.items.length > 0,
