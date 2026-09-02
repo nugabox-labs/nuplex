@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { queryOne } from '@/lib/db'
+import { query } from '@/lib/db'
 import { readSyncRequest, requestSync } from '@/lib/sync-request'
 
 // 수동 동기화. 관리자만 들어온다(proxy 가 /api/admin 을 막는다).
@@ -26,12 +26,12 @@ const SELECT = `SELECT kind, status, started_at AS "startedAt", finished_at AS "
   FROM sync_run`
 
 export async function GET() {
-  const [current, last, pending] = await Promise.all([
-    queryOne<Run>(`${SELECT} WHERE status = 'running' ORDER BY started_at DESC LIMIT 1`),
-    queryOne<Run>(`${SELECT} WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1`),
+  const [runs, pending] = await Promise.all([
+    // 방금 시작한 것(status = 'running')도 그대로 들어온다. 끝나면 워커가 같은 행을 채운다.
+    query<Run>(`${SELECT} ORDER BY started_at DESC LIMIT 10`),
     readSyncRequest(),
   ])
-  return NextResponse.json({ current, last, pending })
+  return NextResponse.json({ runs, pending })
 }
 
 export async function POST() {

@@ -52,6 +52,19 @@ export function formatRelativeTime(value: Date | string): string {
   return date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
 }
 
+/** "09-02 14:03" — 이력 목록은 상대 시각보다 실제 시각이 읽기 좋다. */
+export function formatShortDateTime(value: Date | string): string {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return date.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 /** "2분 34초" 같은 소요 시간 표기. 스캔 · 동기화가 얼마나 걸렸는지 보여줄 때 쓴다. */
 export function formatElapsed(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000))

@@ -10,10 +10,9 @@ export default function AdminScanPage() {
   return (
     <main className="page-safe mx-auto max-w-3xl px-4 md:px-8">
       <AdminNav current="scan" />
-      {/* 동기화가 위, 스캔이 아래다. 둘은 다른 일이고 순서도 스캔 → 동기화지만,
-          관리자가 "화면에 안 올라온다" 로 들어오는 자리라 손이 먼저 닿아야 한다. */}
-      <SyncAdmin />
+      {/* 일이 벌어지는 순서대로 둔다 — Plex 가 파일을 훑고(스캔), 그걸 우리가 읽어 온다(동기화). */}
       <ScanAdmin />
+      <SyncAdmin />
     </main>
   )
 }

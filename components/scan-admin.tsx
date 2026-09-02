@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, RefreshCw, Star } from 'lucide-react'
 import { SectionTitle } from '@/components/section-title'
-import { formatElapsed } from '@/lib/format'
+import { formatElapsed, formatShortDateTime } from '@/lib/format'
 import type { ScanRun } from '@/lib/scan'
 import { cn } from '@/lib/utils'
 
@@ -92,6 +92,8 @@ export function ScanAdmin() {
           ? '스캔을 시작했습니다. 진행은 Plex 가 이어서 합니다.'
           : '스캔을 시작하지 못했습니다.',
       )
+      // 방금 시작한 것이 곧바로 이력에 보이도록 한 번 읽는다.
+      await load()
 
       // Plex 가 이 라이브러리를 다 훑을 때까지 다음 것을 시작하지 않는다.
       // 스캔이 바로 안 잡힐 수 있어 몇 번은 "아직 시작 전" 으로 보고 기다린다.
@@ -99,8 +101,9 @@ export function ScanAdmin() {
         await new Promise((resolve) => setTimeout(resolve, 3000))
         const check = await fetch('/api/admin/scan').catch(() => null)
         if (!check?.ok) break
-        const data = (await check.json()) as { scanning: number[] }
+        const data = (await check.json()) as { scanning: number[]; history: ScanRun[] }
         setScanning(data.scanning)
+        setHistory(data.history)
         if (data.scanning.includes(head)) continue
         if (tick >= 2) break
       }
@@ -134,7 +137,9 @@ export function ScanAdmin() {
   }
 
   return (
-    <div className="space-y-6">
+    <section className="space-y-4">
+      <h2 className="text-lg font-bold text-foreground">스캔</h2>
+
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -166,7 +171,7 @@ export function ScanAdmin() {
         으로 기다립니다. 새 작품은 다음 동기화 때 화면에 올라옵니다.
       </p>
 
-      <ul className="divide-y divide-border/60">
+      <ul className="divide-y divide-border/60 pb-2">
         {sections.map((section) => {
           const busy = running === section.id || scanning.includes(section.id)
           const waiting = queue.includes(section.id) && running !== section.id
@@ -216,8 +221,8 @@ export function ScanAdmin() {
         })}
       </ul>
 
-      <div className="border-t border-border/60 pt-6">
-        <h2 className="mb-3 text-sm font-bold text-foreground">스캔 이력</h2>
+      <div>
+        <h3 className="mb-3 text-sm font-bold text-foreground">스캔 이력</h3>
         {history.length === 0 ? (
           <p className="text-sm text-muted-foreground">아직 스캔한 기록이 없습니다.</p>
         ) : (
@@ -228,7 +233,7 @@ export function ScanAdmin() {
                 className="flex items-center gap-3 py-2"
               >
                 <span className="w-32 shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {formatStartedAt(run.startedAt)}
+                  {formatShortDateTime(run.startedAt)}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-foreground">
                   <SectionTitle title={run.title} />
@@ -250,29 +255,17 @@ export function ScanAdmin() {
           </ul>
         )}
         <p className="mt-3 text-xs text-muted-foreground">
-          최근 20건만 남깁니다. 걸린 시간은 Plex 가 이 라이브러리를 훑고 있다고 답하는 동안을
+          최근 10건만 남깁니다. 걸린 시간은 Plex 가 이 라이브러리를 훑고 있다고 답하는 동안을
           잰 것이라 몇 초 안팎의 오차가 있습니다.
         </p>
       </div>
-    </div>
+    </section>
   )
 }
 
 function statusLabel(status: ScanRun['status']): string {
   if (status === 'running') return '스캔 중'
   return status === 'failed' ? '실패' : '완료'
-}
-
-/** "09-02 14:03" — 이력은 목록이라 상대 시각보다 실제 시각이 읽기 좋다. */
-function formatStartedAt(value: string): string {
-  return new Date(value).toLocaleString('ko-KR', {
-    timeZone: 'Asia/Seoul',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
 }
 
 function elapsedOf(run: ScanRun): string | null {

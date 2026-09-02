@@ -30,7 +30,7 @@ export async function setScanFavorites(ids: number[]): Promise<void> {
 
 // 스캔 이력 — 언제 무엇을 훑었고 얼마나 걸렸는지.
 //
-// 이것도 표를 만들지 않고 sync_state 한 줄에 담는다(최근 20건 JSON). 지나간 작업의
+// 이것도 표를 만들지 않고 sync_state 한 줄에 담는다(최근 10건 JSON). 지나간 작업의
 // 기록일 뿐이라 잃어버려도 손해가 없고, 백업 대상 목록을 늘리지 않아도 된다 — AGENTS §2.
 
 export interface ScanRun {
@@ -42,7 +42,7 @@ export interface ScanRun {
 }
 
 const HISTORY_KEY = 'scan_history'
-const HISTORY_LIMIT = 20
+const HISTORY_LIMIT = 10
 // Plex 가 스캔을 잡기까지 몇 초 걸린다. 그 사이에 "안 훑고 있다" 를 끝난 것으로
 // 읽으면 모든 이력이 0초가 된다 — scan-admin 의 대기줄이 쓰는 유예와 같은 이유다.
 const START_GRACE_MS = 20_000
@@ -63,7 +63,8 @@ export async function readScanHistory(): Promise<ScanRun[]> {
   if (!row?.value) return []
   try {
     const parsed = JSON.parse(row.value)
-    return Array.isArray(parsed) ? (parsed as ScanRun[]) : []
+    // 담긴 것이 더 많아도 보여주는 건 최근 것뿐이다(전에 더 많이 담아 두었을 수 있다).
+    return Array.isArray(parsed) ? (parsed as ScanRun[]).slice(0, HISTORY_LIMIT) : []
   } catch {
     // 값이 깨졌으면 이력을 포기한다. 이것 때문에 스캔 화면이 안 뜨면 안 된다.
     return []
