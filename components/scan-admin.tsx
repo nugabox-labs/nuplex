@@ -32,6 +32,7 @@ interface ScanState {
 
 interface Run {
   kind: string
+  triggeredBy: string
   status: string
   startedAt: string
   finishedAt: string | null
@@ -43,7 +44,7 @@ interface Run {
 
 interface SyncState {
   runs: Run[]
-  pending: { kind: string; requestedAt: string } | null
+  pending: { kind: string; trigger: string; requestedAt: string } | null
 }
 
 export function ScanAdmin() {
@@ -328,8 +329,11 @@ function statusLine(
   return null
 }
 
+/** 무엇이 이 동기화를 촉발했는지 — 정기(30분) · 전체(매일 04:05) · 스캔 · 수동. */
 function syncKindLabel(run: Run): string {
-  return run.kind === 'full' ? '전체' : '증분'
+  if (run.triggeredBy === 'scan') return '스캔'
+  if (run.triggeredBy === 'manual') return '수동'
+  return run.kind === 'full' ? '전체' : '정기'
 }
 
 function syncStatusLabel(status: string): string {

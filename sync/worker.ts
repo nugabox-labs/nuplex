@@ -2,7 +2,7 @@ import cron from 'node-cron'
 import { queryOne } from '@/lib/db'
 import { scanBatchActive } from '@/lib/scan'
 import { takeSyncRequest } from '@/lib/sync-request'
-import { runSync, type SyncKind } from './run'
+import { runSync, type SyncKind, type SyncTriggeredBy } from './run'
 import { tickScanBatch } from './scan'
 
 // 상주 워커. 이 컨테이너만 Plex 토큰을 쥔다.
@@ -32,7 +32,7 @@ let running = false
 // 영영 남아 있게 된다(실제로 일주일 넘게 그랬다). 증분은 30분 뒤에 또 오니 버려도 된다.
 let fullPending = false
 
-async function safeRun(kind: SyncKind) {
+async function safeRun(kind: SyncKind, triggeredBy: SyncTriggeredBy) {
   const blocked = running ? '이전 동기화' : (await scanBatchActive()) ? '스캔 일련 작업' : null
   if (blocked) {
     if (kind === 'full') {
@@ -45,7 +45,7 @@ async function safeRun(kind: SyncKind) {
   }
   running = true
   try {
-    const result = await runSync(kind)
+    const result = await runSync(kind, triggeredBy)
     console.log(
       `[sync] 완료 (${result.kind}) — 항목 ${result.itemsUpserted}건 · ` +
         `에피소드 ${result.episodesUpserted}건 · 컬렉션 ${result.collectionsUpserted}개 · ` +
@@ -62,7 +62,7 @@ async function safeRun(kind: SyncKind) {
 
   if (kind !== 'full' && fullPending) {
     fullPending = false
-    await safeRun('full')
+    await safeRun('full', 'schedule')
   }
 }
 
@@ -71,10 +71,10 @@ async function checkRequest() {
   // 돌고 있거나 스캔 중이면 쪽지를 그대로 둔다. 다음 차례에 집으면 된다 —
   // 여기서 지워 버리면 버튼을 눌렀는데 아무 일도 안 일어난 것이 된다.
   if (running || (await scanBatchActive())) return
-  const kind = await takeSyncRequest().catch(() => null)
-  if (!kind) return
-  console.log(`[sync] 요청을 집었습니다 — ${kind} 동기화를 시작합니다`)
-  await safeRun(kind)
+  const request = await takeSyncRequest().catch(() => null)
+  if (!request) return
+  console.log(`[sync] ${request.trigger} 요청 — ${request.kind} 동기화를 시작합니다`)
+  await safeRun(request.kind, request.trigger)
 }
 
 /**
@@ -93,10 +93,10 @@ async function main() {
   // 받아 주긴 하지만, 애초에 안 부딪히게 두는 편이 낫다.
   const fullCron = process.env.SYNC_FULL_CRON || '5 4 * * *'
 
-  cron.schedule(incrementalCron, () => void safeRun('incremental'), {
+  cron.schedule(incrementalCron, () => void safeRun('incremental', 'schedule'), {
     timezone: TIMEZONE,
   })
-  cron.schedule(fullCron, () => void safeRun('full'), { timezone: TIMEZONE })
+  cron.schedule(fullCron, () => void safeRun('full', 'schedule'), { timezone: TIMEZONE })
 
   setInterval(() => void tick(), POLL_MS)
 
@@ -113,7 +113,7 @@ async function main() {
     // 최초 채우기는 몇 시간짜리라 중간에 한 번 끊기면 다음 주기(30분)까지 놀게 된다.
     // 커서가 남아 있으니 이어서 하면 되고, 끝날 때까지 붙잡고 있는다.
     for (let attempt = 1; attempt <= 20; attempt += 1) {
-      await safeRun('full')
+      await safeRun('full', 'schedule')
       const done = await queryOne<{ id: string }>(
         `SELECT id FROM sync_run WHERE status = 'ok' LIMIT 1`,
       )

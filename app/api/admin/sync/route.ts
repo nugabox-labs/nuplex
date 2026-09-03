@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic'
 
 interface Run {
   kind: string
+  triggeredBy: string
   status: string
   startedAt: Date
   finishedAt: Date | null
@@ -20,7 +21,8 @@ interface Run {
   error: string | null
 }
 
-const SELECT = `SELECT kind, status, started_at AS "startedAt", finished_at AS "finishedAt",
+const SELECT = `SELECT kind, triggered_by AS "triggeredBy", status,
+       started_at AS "startedAt", finished_at AS "finishedAt",
        items_upserted AS "itemsUpserted", episodes_upserted AS "episodesUpserted",
        items_deleted AS "itemsDeleted", error
   FROM sync_run`
@@ -36,6 +38,7 @@ export async function GET() {
 
 export async function POST() {
   // 종류는 증분 하나다. 전체 훑기는 몇 시간짜리라 버튼으로 부를 일이 아니다(매일 04:05 에 돈다).
-  await requestSync('incremental')
+  // 스캔이 돌고 있으면 워커가 이 쪽지를 그대로 두었다가 끝난 뒤에 집는다.
+  await requestSync('incremental', 'manual')
   return NextResponse.json({ ok: true })
 }

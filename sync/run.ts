@@ -40,6 +40,8 @@ import { refreshTastes } from './taste'
 // 그 자리에서 이어받는다 — 라이브러리가 커서 한 번에 못 끝낼 때를 위한 것이다.
 
 export type SyncKind = 'incremental' | 'full'
+// 이력 화면의 라벨을 가르는 값 — 정기 · 스캔 · 수동. database/0018 참고.
+export type SyncTriggeredBy = 'schedule' | 'scan' | 'manual'
 
 const LAST_SUCCESS_KEY = 'last_success_at'
 // 시청 기록을 어디까지 받았는지. 처음에는 값이 없어 전체(수천 건)를 한 번 받는다.
@@ -64,14 +66,17 @@ export interface SyncResult {
   itemsDeleted: number
 }
 
-export async function runSync(kind: SyncKind): Promise<SyncResult> {
+export async function runSync(
+  kind: SyncKind,
+  triggeredBy: SyncTriggeredBy = 'schedule',
+): Promise<SyncResult> {
   const env = readPlexEnv()
   const startedAt = new Date()
   const counter: ImageCounter = { saved: 0 }
 
   const run = await queryOne<{ id: string }>(
-    `INSERT INTO sync_run (kind, status) VALUES ($1, 'running') RETURNING id`,
-    [kind],
+    `INSERT INTO sync_run (kind, triggered_by, status) VALUES ($1, $2, 'running') RETURNING id`,
+    [kind, triggeredBy],
   )
   const runId = run!.id
 
@@ -395,7 +400,7 @@ async function markMissingAsDeleted(sweepStartedAt: Date): Promise<number> {
 // `./compose.sh sync` · `./compose.sh sync --full` 이 여기로 들어온다.
 if (process.argv[1]?.endsWith('run.ts')) {
   const kind: SyncKind = process.argv.includes('--full') ? 'full' : 'incremental'
-  runSync(kind)
+  runSync(kind, 'manual')
     .then((r) => {
       console.log(
         `[sync] 완료 (${r.kind}) — 항목 ${r.itemsUpserted}건 · 에피소드 ${r.episodesUpserted}건 · ` +

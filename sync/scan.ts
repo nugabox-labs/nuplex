@@ -86,6 +86,6 @@ export async function tickScanBatch(): Promise<void> {
 
   // 대기줄이 비었다 = 일련 작업 끝. 이어서 동기화 한 번.
   await endScanBatch()
-  await requestSync('incremental')
+  await requestSync('incremental', 'scan')
   console.log('[scan] 일련 스캔을 마쳤습니다. 이어서 동기화를 겁니다')
 }
