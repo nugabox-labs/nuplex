@@ -1,7 +1,9 @@
 import cron from 'node-cron'
 import { queryOne } from '@/lib/db'
+import { scanBatchActive } from '@/lib/scan'
 import { takeSyncRequest } from '@/lib/sync-request'
 import { runSync, type SyncKind } from './run'
+import { tickScanBatch } from './scan'
 
 // 상주 워커. 이 컨테이너만 Plex 토큰을 쥔다.
 //
@@ -10,13 +12,18 @@ import { runSync, type SyncKind } from './run'
 //
 // 관리자 화면의 "지금 동기화" 버튼도 여기로 들어온다. web 은 Plex 를 못 부르므로
 // 버튼은 DB 에 쪽지만 남기고, 아래 폴링이 그걸 집어 온다(lib/sync-request.ts).
+// 라이브러리 스캔의 일련 작업도 같은 폴링이 한 칸씩 민다(sync/scan.ts).
+//
+// 스캔과 동기화는 절대 겹치지 않는다. 동기화가 도는 동안에는 다음 스캔을 시작하지 않고,
+// 스캔 일련 작업이 살아 있는 동안에는 동기화를 시작하지 않는다 — 어느 쪽도 중단하지
+// 않고 앞의 것이 끝난 뒤에 이어서 한다.
 //
 // 기동 시 성공 이력이 하나도 없으면 곧바로 전체 동기화를 한 번 돌린다.
 // 최초 배포 후 사람이 따로 뭘 치지 않아도 화면이 채워지게 하려는 것이다.
 
 const TIMEZONE = process.env.TZ || 'Asia/Seoul'
 // 버튼을 누른 사람이 기다리는 시간이다. 짧게 둔다 — 쪽지 확인은 질의 한 번이라 거의 공짜다.
-const REQUEST_POLL_MS = 10_000
+const POLL_MS = 10_000
 
 // 두 스케줄이 겹치면 같은 항목에 동시에 쓰게 된다. 한 번에 하나만 돌린다.
 let running = false
@@ -26,12 +33,13 @@ let running = false
 let fullPending = false
 
 async function safeRun(kind: SyncKind) {
-  if (running) {
+  const blocked = running ? '이전 동기화' : (await scanBatchActive()) ? '스캔 일련 작업' : null
+  if (blocked) {
     if (kind === 'full') {
       fullPending = true
-      console.log('[sync] full 미룸 — 이전 동기화가 끝나는 대로 이어서 돈다')
+      console.log(`[sync] full 미룸 — ${blocked}이 끝나는 대로 이어서 돈다`)
     } else {
-      console.log(`[sync] ${kind} 건너뜀 — 이전 동기화가 아직 진행 중`)
+      console.log(`[sync] ${kind} 건너뜀 — ${blocked}이 아직 진행 중`)
     }
     return
   }
@@ -58,15 +66,25 @@ async function safeRun(kind: SyncKind) {
   }
 }
 
-/** 관리자가 남긴 수동 동기화 요청을 집어 온다. */
+/** 남겨진 동기화 요청을 집어 온다 — 관리자 버튼이거나, 방금 끝난 스캔 일련 작업이다. */
 async function checkRequest() {
-  // 이미 돌고 있으면 쪽지를 그대로 둔다. 다음 차례에 집으면 된다 —
+  // 돌고 있거나 스캔 중이면 쪽지를 그대로 둔다. 다음 차례에 집으면 된다 —
   // 여기서 지워 버리면 버튼을 눌렀는데 아무 일도 안 일어난 것이 된다.
-  if (running) return
+  if (running || (await scanBatchActive())) return
   const kind = await takeSyncRequest().catch(() => null)
   if (!kind) return
-  console.log(`[sync] 관리자 요청 — ${kind} 동기화를 시작합니다`)
+  console.log(`[sync] 요청을 집었습니다 — ${kind} 동기화를 시작합니다`)
   await safeRun(kind)
+}
+
+/**
+ * 10초마다 도는 한 틱. 스캔을 먼저 민다 — 마지막 스캔이 끝나면 그 자리에서 동기화
+ * 요청이 남으므로, 이어지는 checkRequest 가 그것을 곧바로 집어 간다.
+ */
+async function tick() {
+  if (running) return
+  await tickScanBatch().catch((error) => console.error('[scan] 일련 작업 실패:', error))
+  await checkRequest()
 }
 
 async function main() {
@@ -75,14 +93,16 @@ async function main() {
   // 받아 주긴 하지만, 애초에 안 부딪히게 두는 편이 낫다.
   const fullCron = process.env.SYNC_FULL_CRON || '5 4 * * *'
 
-  cron.schedule(incrementalCron, () => void safeRun('incremental'), { timezone: TIMEZONE })
+  cron.schedule(incrementalCron, () => void safeRun('incremental'), {
+    timezone: TIMEZONE,
+  })
   cron.schedule(fullCron, () => void safeRun('full'), { timezone: TIMEZONE })
 
-  setInterval(() => void checkRequest(), REQUEST_POLL_MS)
+  setInterval(() => void tick(), POLL_MS)
 
   console.log(
     `[sync] 워커 시작 — 증분 "${incrementalCron}" · 전체 "${fullCron}" (${TIMEZONE}) · ` +
-      `수동 요청 확인 ${REQUEST_POLL_MS / 1000}초마다`,
+      `스캔 · 요청 확인 ${POLL_MS / 1000}초마다`,
   )
 
   const succeeded = await queryOne<{ id: string }>(

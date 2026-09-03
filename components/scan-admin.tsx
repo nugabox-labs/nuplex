@@ -1,17 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, RefreshCw, Star } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Loader2, RefreshCw, RotateCw, Star } from 'lucide-react'
 import { SectionTitle } from '@/components/section-title'
-import { formatElapsed, formatShortDateTime } from '@/lib/format'
+import { formatElapsed, formatRelativeTime, formatShortDateTime } from '@/lib/format'
 import type { ScanRun } from '@/lib/scan'
 import { cn } from '@/lib/utils'
 
-// Plex 라이브러리 파일 스캔. Plex 화면에서 하나씩 누르던 일을 여기서 한다.
-// 즐겨찾기로 묶어두면 "즐겨찾기 스캔" 한 번으로 순서대로 다 건다.
+// 스캔과 동기화. 둘은 다른 일이지만 하나의 흐름이라 한 화면에 둔다 —
+// Plex 가 파일을 훑고(스캔), 그렇게 채워진 Plex 를 누플렉스가 읽어 온다(동기화).
 //
-// 연달아 눌러도 한꺼번에 나가지 않는다. 대기줄에 쌓아 두고 앞의 것이 Plex 에서
-// 끝날 때까지 기다린다 — 여러 갈래로 동시에 훑으면 NAS 디스크가 그만큼 느려진다.
+// 어느 버튼도 Plex 를 부르지 않는다. 스캔은 대기줄에, 동기화는 쪽지에 남기고
+// sync 워커가 10초 안에 집어 간다(AGENTS §2 — Plex 호출은 워커만 한다).
+//
+// **대기가 없어질 때까지가 하나의 일련 작업이다.** 여러 개를 걸어도 한 번에 하나씩
+// 순서대로 훑고, 마지막 하나가 끝나면 워커가 이어서 동기화를 한 번 돌린다.
 
 interface Section {
   id: number
@@ -19,105 +22,95 @@ interface Section {
   count: number
 }
 
+interface ScanState {
+  sections: Section[]
+  favorites: number[]
+  current: number | null
+  queue: number[]
+  history: ScanRun[]
+}
+
+interface Run {
+  kind: string
+  status: string
+  startedAt: string
+  finishedAt: string | null
+  itemsUpserted: number
+  episodesUpserted: number
+  itemsDeleted: number
+  error: string | null
+}
+
+interface SyncState {
+  runs: Run[]
+  pending: { kind: string; requestedAt: string } | null
+}
+
 export function ScanAdmin() {
-  const [sections, setSections] = useState<Section[]>([])
-  const [favorites, setFavorites] = useState<number[]>([])
-  const [scanning, setScanning] = useState<number[]>([])
-  const [history, setHistory] = useState<ScanRun[]>([])
-  // 대기줄. 맨 앞이 지금 시작을 요청 중이거나 Plex 가 훑고 있는 것이다.
-  const [queue, setQueue] = useState<number[]>([])
-  const [running, setRunning] = useState<number | null>(null)
-  // 같은 항목을 두 번 시작하지 않기 위한 표식(개발 모드의 효과 두 번 실행 대비)
-  const startedRef = useRef<number | null>(null)
+  const [scan, setScan] = useState<ScanState | null>(null)
+  const [sync, setSync] = useState<SyncState | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/admin/scan')
-    if (!res.ok) {
-      setMessage('라이브러리 목록을 불러오지 못했습니다.')
-      setLoading(false)
-      return
-    }
-    const data = (await res.json()) as {
-      sections: Section[]
-      favorites: number[]
-      scanning: number[]
-      history: ScanRun[]
-    }
-    setSections(data.sections)
-    setFavorites(data.favorites)
-    setScanning(data.scanning)
-    setHistory(data.history)
-    setLoading(false)
+    const [scanRes, syncRes] = await Promise.all([
+      fetch('/api/admin/scan').catch(() => null),
+      fetch('/api/admin/sync').catch(() => null),
+    ])
+    if (scanRes?.ok) setScan((await scanRes.json()) as ScanState)
+    else setMessage('라이브러리 목록을 불러오지 못했습니다.')
+    if (syncRes?.ok) setSync((await syncRes.json()) as SyncState)
   }, [])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  // 스캔이 도는 동안에는 진행 상황을 계속 확인한다. 끝나면 폴링도 멈춘다.
+  const sections = scan?.sections ?? []
+  const favorites = scan?.favorites ?? []
+  const queue = scan?.queue ?? []
+  const current = scan?.current ?? null
+  const runs = sync?.runs ?? []
+  const running = runs.find((run) => run.status === 'running') ?? null
+
+  // 스캔이 남았거나 동기화가 걸려 있는 동안만 들여다본다. 노는 중에는 폴링도 쉰다.
+  const busy = Boolean(current !== null || queue.length > 0 || running || sync?.pending)
+
   useEffect(() => {
-    if (scanning.length === 0) return
+    if (!busy) return
     const timer = setInterval(() => void load(), 5000)
     return () => clearInterval(timer)
-  }, [scanning.length, load])
+  }, [busy, load])
 
-  /** 대기줄에 넣기만 한다. 실제 호출은 아래 효과가 하나씩 꺼내서 한다. */
-  function enqueue(ids: number[]) {
+  async function enqueue(ids: number[]) {
     if (ids.length === 0) return
     setMessage(null)
-    setQueue((list) => [...list, ...ids.filter((id) => !list.includes(id) && id !== running)])
+    const res = await fetch('/api/admin/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sectionIds: ids }),
+    }).catch(() => null)
+    setMessage(
+      res?.ok
+        ? '스캔을 걸었습니다. 순서대로 하나씩 훑고, 다 끝나면 동기화까지 이어집니다.'
+        : '스캔을 걸지 못했습니다.',
+    )
+    await load()
   }
 
-  // 대기줄 처리 — 앞의 것이 끝나야 다음이 나간다.
-  // `head` 는 노는 동안의 맨 앞 하나다. 스캔 중에는 undefined 라 효과가 다시 돌지 않는다
-  // (대기줄에 더 넣어도 진행 중인 것이 끊기지 않게 하려는 것).
-  const head = running === null ? queue[0] : undefined
-
-  useEffect(() => {
-    if (head === undefined || startedRef.current === head) return
-    startedRef.current = head
-    setRunning(head)
-
-    void (async () => {
-      const res = await fetch('/api/admin/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sectionIds: [head] }),
-      }).catch(() => null)
-
-      setMessage(
-        res?.ok
-          ? '스캔을 시작했습니다. 진행은 Plex 가 이어서 합니다.'
-          : '스캔을 시작하지 못했습니다.',
-      )
-      // 방금 시작한 것이 곧바로 이력에 보이도록 한 번 읽는다.
-      await load()
-
-      // Plex 가 이 라이브러리를 다 훑을 때까지 다음 것을 시작하지 않는다.
-      // 스캔이 바로 안 잡힐 수 있어 몇 번은 "아직 시작 전" 으로 보고 기다린다.
-      for (let tick = 0; tick < 2400; tick += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 3000))
-        const check = await fetch('/api/admin/scan').catch(() => null)
-        if (!check?.ok) break
-        const data = (await check.json()) as { scanning: number[]; history: ScanRun[] }
-        setScanning(data.scanning)
-        setHistory(data.history)
-        if (data.scanning.includes(head)) continue
-        if (tick >= 2) break
-      }
-
-      await load()
-      startedRef.current = null
-      setQueue((list) => list.filter((v) => v !== head))
-      setRunning(null)
-    })()
-  }, [head, load])
+  async function startSync() {
+    setMessage(null)
+    const res = await fetch('/api/admin/sync', { method: 'POST' }).catch(() => null)
+    setMessage(
+      res?.ok
+        ? '동기화를 요청했습니다. 워커가 10초 안에 시작합니다.'
+        : '동기화를 요청하지 못했습니다.',
+    )
+    await load()
+  }
 
   async function toggleFavorite(id: number) {
     const next = favorites.includes(id) ? favorites.filter((v) => v !== id) : [...favorites, id]
-    setFavorites(next)
+    setScan((prev) => (prev ? { ...prev, favorites: next } : prev))
     await fetch('/api/admin/scan', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -125,9 +118,7 @@ export function ScanAdmin() {
     })
   }
 
-  const favoriteSections = sections.filter((section) => favorites.includes(section.id))
-
-  if (loading) {
+  if (!scan) {
     return (
       <p className="flex items-center justify-center gap-2 py-20 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -136,102 +127,125 @@ export function ScanAdmin() {
     )
   }
 
+  const favoriteSections = sections.filter((section) => favorites.includes(section.id))
+  const scanBusy = current !== null || queue.length > 0
+  // 잠그는 건 "아직 안 집어 간 요청" 이 있을 때뿐이다. 진행 중이라고 잠그면,
+  // 워커가 죽어 running 행이 남았을 때 버튼을 영영 못 누른다 — 하필 그때 제일 필요하다.
+  const syncLocked = Boolean(sync?.pending)
+
   return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-bold text-foreground">스캔</h2>
+    <>
+      <section className="space-y-4">
+        <h2 className="text-lg font-bold text-foreground">스캔 및 동기화</h2>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => enqueue(favoriteSections.map((section) => section.id))}
-          disabled={favoriteSections.length === 0}
-          className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
-        >
-          {queue.length > 1 ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Star className="h-4 w-4 fill-current" />
-          )}
-          즐겨찾기 스캔 {favoriteSections.length > 0 ? `(${favoriteSections.length})` : ''}
-        </button>
-        <button
-          type="button"
-          onClick={() => enqueue(sections.map((section) => section.id))}
-          className="flex items-center gap-2 rounded-md border border-border bg-secondary/60 px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
-        >
-          <RefreshCw className="h-4 w-4" />
-          전체 스캔
-        </button>
-        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-      </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void enqueue(favoriteSections.map((section) => section.id))}
+            disabled={favoriteSections.length === 0}
+            className="flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
+          >
+            {scanBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Star className="h-4 w-4 fill-current" />
+            )}
+            즐겨찾기 스캔 {favoriteSections.length > 0 ? `(${favoriteSections.length})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => void enqueue(sections.map((section) => section.id))}
+            className="flex items-center gap-2 rounded-md border border-border bg-secondary/60 px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            전체 스캔
+          </button>
+          <button
+            type="button"
+            onClick={() => void startSync()}
+            disabled={syncLocked}
+            className="flex items-center gap-2 rounded-md border border-border bg-secondary/60 px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
+          >
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCw className="h-4 w-4" />
+            )}
+            지금 동기화
+          </button>
+        </div>
 
-      <p className="text-sm text-muted-foreground">
-        별을 눌러 즐겨찾기에 넣어 두면 위 버튼 하나로 순서대로 훑습니다. 여러 개를 연달아
-        눌러도 한 번에 하나씩만 돌고 나머지는 <strong className="text-foreground">스캔 대기 중</strong>
-        으로 기다립니다. 새 작품은 다음 동기화 때 화면에 올라옵니다.
-      </p>
+        <p className="text-sm text-muted-foreground">
+          {statusLine(scanBusy, running, sync?.pending ?? null) ?? message ?? ''}
+        </p>
 
-      <ul className="divide-y divide-border/60 pb-2">
-        {sections.map((section) => {
-          const busy = running === section.id || scanning.includes(section.id)
-          const waiting = queue.includes(section.id) && running !== section.id
-          return (
-            <li key={section.id} className="flex items-center gap-3 py-2.5">
-              <button
-                type="button"
-                onClick={() => toggleFavorite(section.id)}
-                aria-label={favorites.includes(section.id) ? '즐겨찾기 빼기' : '즐겨찾기'}
-                className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition hover:bg-secondary',
-                  favorites.includes(section.id) ? 'text-primary' : 'text-muted-foreground',
-                )}
-              >
-                <Star
-                  className={cn('h-4 w-4', favorites.includes(section.id) && 'fill-current')}
-                />
-              </button>
+        <p className="text-sm text-muted-foreground">
+          별을 눌러 즐겨찾기에 넣어 두면 위 버튼 하나로 순서대로 훑습니다. 여러 개를 연달아
+          눌러도 한 번에 하나씩만 돌고 나머지는{' '}
+          <strong className="text-foreground">스캔 대기 중</strong> 으로 기다립니다.{' '}
+          <strong className="text-foreground">대기가 다 없어지면 동기화가 이어서 한 번 돕니다</strong>
+          — 새 작품은 그때 화면에 올라옵니다. 스캔과 동기화는 서로 겹치지 않고 차례를 기다립니다.
+        </p>
 
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                <SectionTitle title={section.title} />
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {section.count}편
+        <ul className="divide-y divide-border/60 pb-2">
+          {sections.map((section) => {
+            const isCurrent = current === section.id
+            const waiting = queue.includes(section.id)
+            return (
+              <li key={section.id} className="flex items-center gap-3 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => void toggleFavorite(section.id)}
+                  aria-label={favorites.includes(section.id) ? '즐겨찾기 빼기' : '즐겨찾기'}
+                  className={cn(
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition hover:bg-secondary',
+                    favorites.includes(section.id) ? 'text-primary' : 'text-muted-foreground',
+                  )}
+                >
+                  <Star
+                    className={cn('h-4 w-4', favorites.includes(section.id) && 'fill-current')}
+                  />
+                </button>
+
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                  <SectionTitle title={section.title} />
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {section.count}편
+                  </span>
                 </span>
-              </span>
 
-              {busy ? (
-                <span className="flex items-center gap-1.5 text-xs text-primary">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  스캔 중
-                </span>
-              ) : waiting ? (
-                <span className="text-xs text-muted-foreground">스캔 대기 중</span>
-              ) : null}
+                {isCurrent ? (
+                  <span className="flex items-center gap-1.5 text-xs text-primary">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    스캔 중
+                  </span>
+                ) : waiting ? (
+                  <span className="text-xs text-muted-foreground">스캔 대기 중</span>
+                ) : null}
 
-              <button
-                type="button"
-                onClick={() => enqueue([section.id])}
-                disabled={busy || waiting}
-                className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                스캔
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+                <button
+                  type="button"
+                  onClick={() => void enqueue([section.id])}
+                  disabled={isCurrent || waiting}
+                  className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary disabled:opacity-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  스캔
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
 
-      <div>
+      <section className="mt-8 border-t border-border/60 pt-8">
         <h3 className="mb-3 text-sm font-bold text-foreground">스캔 이력</h3>
-        {history.length === 0 ? (
+        {scan.history.length === 0 ? (
           <p className="text-sm text-muted-foreground">아직 스캔한 기록이 없습니다.</p>
         ) : (
           <ul className="divide-y divide-border/60 text-sm">
-            {history.map((run) => (
-              <li
-                key={`${run.startedAt}:${run.sectionId}`}
-                className="flex items-center gap-3 py-2"
-              >
+            {scan.history.map((run) => (
+              <li key={`${run.startedAt}:${run.sectionId}`} className="flex items-center gap-3 py-2">
                 <span className="w-32 shrink-0 text-xs tabular-nums text-muted-foreground">
                   {formatShortDateTime(run.startedAt)}
                 </span>
@@ -245,10 +259,10 @@ export function ScanAdmin() {
                     run.status === 'running' && 'text-primary',
                   )}
                 >
-                  {statusLabel(run.status)}
+                  {scanStatusLabel(run.status)}
                 </span>
                 <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                  {elapsedOf(run) ?? ''}
+                  {elapsedOf(run.startedAt, run.finishedAt)}
                 </span>
               </li>
             ))}
@@ -258,17 +272,77 @@ export function ScanAdmin() {
           최근 10건만 남깁니다. 걸린 시간은 Plex 가 이 라이브러리를 훑고 있다고 답하는 동안을
           잰 것이라 몇 초 안팎의 오차가 있습니다.
         </p>
-      </div>
-    </section>
+      </section>
+
+      <section className="mt-8 border-t border-border/60 pt-8">
+        <h3 className="mb-3 text-sm font-bold text-foreground">동기화 이력</h3>
+        {runs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">아직 동기화된 적이 없습니다.</p>
+        ) : (
+          <ul className="divide-y divide-border/60 text-sm">
+            {runs.map((run) => (
+              <li key={run.startedAt} className="flex items-center gap-3 py-2">
+                <span className="w-32 shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {formatShortDateTime(run.startedAt)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-foreground">
+                  {syncKindLabel(run)}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {run.error
+                      ? run.error
+                      : `작품 ${run.itemsUpserted}건 · 에피소드 ${run.episodesUpserted}건`}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 text-xs',
+                    run.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
+                    run.status === 'running' && 'text-primary',
+                  )}
+                >
+                  {syncStatusLabel(run.status)}
+                </span>
+                <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {elapsedOf(run.startedAt, run.finishedAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   )
 }
 
-function statusLabel(status: ScanRun['status']): string {
+/** 지금 무슨 일이 벌어지고 있는지 한 줄. 아무 일도 없으면 null 이라 버튼 메시지가 대신 나온다. */
+function statusLine(
+  scanBusy: boolean,
+  running: Run | null,
+  pending: SyncState['pending'],
+): string | null {
+  if (scanBusy) return '스캔 중 · 대기가 다 없어지면 동기화가 이어서 돕니다'
+  if (running) {
+    return `동기화 중 · ${syncKindLabel(running)} · ${formatRelativeTime(running.startedAt)} 시작`
+  }
+  if (pending) return '동기화 요청을 남겼습니다. 워커가 곧 집어 갑니다.'
+  return null
+}
+
+function syncKindLabel(run: Run): string {
+  return run.kind === 'full' ? '전체' : '증분'
+}
+
+function syncStatusLabel(status: string): string {
+  if (status === 'running') return '동기화 중'
+  return status === 'failed' ? '실패' : '완료'
+}
+
+function scanStatusLabel(status: ScanRun['status']): string {
   if (status === 'running') return '스캔 중'
   return status === 'failed' ? '실패' : '완료'
 }
 
-function elapsedOf(run: ScanRun): string | null {
-  if (!run.finishedAt) return null
-  return formatElapsed(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime())
+function elapsedOf(startedAt: string, finishedAt: string | null): string {
+  if (!finishedAt) return ''
+  return formatElapsed(new Date(finishedAt).getTime() - new Date(startedAt).getTime())
 }

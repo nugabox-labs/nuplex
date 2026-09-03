@@ -1,29 +1,36 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSections } from '@/lib/library'
-import { readPlexEnv, refreshSection, scanningSectionIds } from '@/lib/plex/client'
 import {
-  appendScanRun,
+  enqueueScans,
   getScanFavorites,
-  reconcileScanHistory,
+  readScanBatch,
+  readScanHistory,
   setScanFavorites,
 } from '@/lib/scan'
 
 // 라이브러리 파일 스캔. 관리자만 들어온다(proxy 가 /api/admin 을 막는다).
 //
-// 여기서만 web 이 Plex 를 직접 호출한다. 화면을 그리는 길이 아니라 관리자가 버튼을
-// 누를 때만 나가는 호출이라, "화면이 Plex 를 기다리지 않는다" 는 원칙은 지켜진다 —
-// AGENTS §2 에 예외로 적어 두었다.
+// 여기서 Plex 를 부르지 않는다. 스캔을 걸면 대기줄에 쌓이기만 하고, 실제로 Plex 를
+// 부르며 진행을 지켜보는 것은 sync 워커다(sync/scan.ts) — 탭을 닫아도 일련 작업이
+// 끝까지 가고, 끝나면 동기화까지 이어지게 하려는 것이다.
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const [sections, favorites] = await Promise.all([getSections(), getScanFavorites()])
-  // Plex 가 지금 훑고 있는 것. 못 물어봐도 화면은 떠야 한다.
-  // 못 물어본 것(null)과 아무것도 안 훑는 것([])은 다르다 — 이력의 "끝난 시각" 이 여기에 달려 있다.
-  const scanning = await scanningSectionIds(readPlexEnv()).catch(() => null)
-  // 이력이 끝나는 시점을 알려줄 사람이 따로 없다. 이 조회가 올 때마다 맞춘다.
-  const history = await reconcileScanHistory(scanning)
-  return NextResponse.json({ sections, favorites, scanning: scanning ?? [], history })
+  const [sections, favorites, batch, history] = await Promise.all([
+    getSections(),
+    getScanFavorites(),
+    readScanBatch(),
+    readScanHistory(),
+  ])
+  return NextResponse.json({
+    sections,
+    favorites,
+    // 지금 훑는 중인 하나와, 그 뒤에 줄 서 있는 것들.
+    current: batch?.current?.id ?? null,
+    queue: batch?.queue ?? [],
+    history,
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -36,27 +43,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '스캔할 라이브러리를 고르지 않았습니다.' }, { status: 400 })
   }
 
-  const env = readPlexEnv()
-  const sections = await getSections()
-  const started: number[] = []
-  const failed: number[] = []
-
-  // 하나씩 순서대로 건다. Plex 는 요청을 즉시 받고 뒤에서 훑으므로 오래 걸리지 않는다.
-  // 여러 개를 한꺼번에 던지면 NAS 디스크가 동시에 여러 갈래로 긁힌다.
-  for (const id of ids) {
-    let ok = true
-    try {
-      await refreshSection(env, id)
-      started.push(id)
-    } catch {
-      ok = false
-      failed.push(id)
-    }
-    const title = sections.find((section) => section.id === id)?.title ?? `#${id}`
-    await appendScanRun(id, title, ok)
-  }
-
-  return NextResponse.json({ started, failed })
+  // 진행 중인 일련 작업이 있으면 그 뒤에 붙는다. 끊지 않는다.
+  await enqueueScans(ids)
+  const batch = await readScanBatch()
+  return NextResponse.json({ current: batch?.current?.id ?? null, queue: batch?.queue ?? [] })
 }
 
 /** 즐겨찾기 저장 — 자주 스캔하는 라이브러리를 묶어 한 번에 건다. */
