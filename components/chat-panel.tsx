@@ -30,10 +30,21 @@ const REQUEST_TEMPLATE = [
   '내용 : 원하는 회차, 개봉/방영 시기 등 전달이 필요한 내용을 입력해주세요',
 ].join('\n')
 
-/** SSE 로 오는 신호. 식별자만 온다 — 본문은 받은 쪽이 다시 읽는다(lib/chat.ts). */
+/**
+ * SSE 로 오는 신호. 식별자만 온다 — 본문은 받은 쪽이 다시 읽는다(lib/chat.ts).
+ * `kind: 'read'` 는 상대가 읽었다는 신호다. 새 메시지에는 kind 가 없다.
+ */
 interface ChatEvent {
+  kind?: 'read'
   conversationId: string
-  messageId: string
+  messageId?: string
+}
+
+/** 아직 서버가 받았다고 답하지 않은 내 메시지. 보내는 즉시 화면에 띄운다. */
+interface PendingMessage {
+  tempId: string
+  body: string
+  failed: boolean
 }
 
 export function ChatPanel({ adminSelf = false }: { adminSelf?: boolean }) {
@@ -405,8 +416,12 @@ function Room({
   onSent: () => void
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [pending, setPending] = useState<PendingMessage[]>([])
+  // 상대가 여기까지 읽었다. 내 메시지 중 id 가 이 이하면 "읽음" 이다.
+  const [partnerRead, setPartnerRead] = useState(0)
   const [draft, setDraft] = useState(initialDraft ?? '')
-  const [sending, setSending] = useState(false)
+  // 연달아 보내도 쓴 순서대로 저장되게 요청을 한 줄로 세운다.
+  const sendQueue = useRef<Promise<void>>(Promise.resolve())
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -422,8 +437,14 @@ function Room({
   const load = useCallback(async () => {
     const res = await fetch(`/api/chat/messages?conversationId=${conversationId}`)
     if (!res.ok) return
-    const data = (await res.json()) as { messages: ChatMessage[] }
-    setMessages(data.messages)
+    const data = (await res.json()) as { messages: ChatMessage[]; partnerReadId?: string }
+    // 이 조회가 나간 뒤에 방금 보낸 것이 먼저 붙어 있을 수 있다. 서버 목록보다 새것은 지키지
+    // 않으면 내 메시지가 잠깐 사라졌다가 다시 나타난다.
+    setMessages((prev) => {
+      const last = Number(data.messages.at(-1)?.id ?? 0)
+      return [...data.messages, ...prev.filter((m) => Number(m.id) > last)]
+    })
+    setPartnerRead(Number(data.partnerReadId ?? 0))
   }, [conversationId])
 
   useEffect(() => {
@@ -437,29 +458,50 @@ function Room({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages])
+  }, [messages, pending])
 
-  async function send() {
-    const body = draft.trim()
-    if (!body || sending) return
-    setSending(true)
-    const res = await fetch('/api/chat/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId, body }),
-    })
-    if (res.ok) {
-      setDraft('')
-      await load()
+  /** 한 통을 서버에 보낸다. 실패하면 말풍선에 "전송 실패" 를 남겨 다시 누를 수 있게 한다. */
+  function post(item: PendingMessage) {
+    sendQueue.current = sendQueue.current.then(async () => {
+      const res = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId, body: item.body }),
+      }).catch(() => null)
+      if (!res?.ok) {
+        setPending((prev) =>
+          prev.map((p) => (p.tempId === item.tempId ? { ...p, failed: true } : p)),
+        )
+        return
+      }
+      const { message } = (await res.json()) as { message: ChatMessage }
+      setPending((prev) => prev.filter((p) => p.tempId !== item.tempId))
+      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
       onSent()
-    }
-    setSending(false)
+    })
+  }
+
+  // 누르는 즉시 말풍선을 띄우고 입력창을 비운다. 저장은 뒤에서 한다 — 응답을 기다리는
+  // 동안 아무것도 안 떠서 여러 번 누르게 되던 것을 막는다.
+  function send() {
+    const body = draft.trim()
+    if (!body) return
+    const item: PendingMessage = { tempId: crypto.randomUUID(), body, failed: false }
+    setDraft('')
+    setPending((prev) => [...prev, item])
+    post(item)
+  }
+
+  function retry(item: PendingMessage) {
+    const again = { ...item, failed: false }
+    setPending((prev) => prev.map((p) => (p.tempId === item.tempId ? again : p)))
+    post(again)
   }
 
   return (
     <>
       <div className="flex-1 space-y-2 overflow-y-auto px-5 py-4">
-        {messages.length === 0 ? (
+        {messages.length === 0 && pending.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">
             {partner.name} 님에게 첫 메시지를 보내 보세요.
           </p>
@@ -482,13 +524,50 @@ function Room({
                 >
                   <p className="whitespace-pre-wrap break-words">{message.body}</p>
                 </div>
-                <time className="shrink-0 pb-0.5 text-[10px] text-muted-foreground">
-                  {formatRelativeTime(message.createdAt)}
-                </time>
+                <span
+                  className={cn(
+                    'flex shrink-0 flex-col pb-0.5 text-[10px]',
+                    mine ? 'order-first items-end' : 'items-start',
+                  )}
+                >
+                  {mine ? (
+                    <span className="font-semibold text-primary">
+                      {Number(message.id) <= partnerRead ? '읽음' : '전송됨'}
+                    </span>
+                  ) : null}
+                  <time className="text-muted-foreground">
+                    {formatRelativeTime(message.createdAt)}
+                  </time>
+                </span>
               </div>
             )
           })
         )}
+        {pending.map((item) => (
+          <div key={item.tempId} className="flex items-end justify-end gap-2">
+            <span className="flex shrink-0 flex-col items-end pb-0.5 text-[10px] font-semibold">
+              {item.failed ? (
+                <button
+                  type="button"
+                  onClick={() => retry(item)}
+                  className="text-destructive underline-offset-2 hover:underline"
+                >
+                  전송 실패 · 다시
+                </button>
+              ) : (
+                <span className="chat-sending">전송중</span>
+              )}
+            </span>
+            <div
+              className={cn(
+                'max-w-[75%] rounded-2xl rounded-br-sm bg-primary px-3.5 py-2 text-sm leading-relaxed text-primary-foreground',
+                item.failed ? 'opacity-50' : 'opacity-80',
+              )}
+            >
+              <p className="whitespace-pre-wrap break-words">{item.body}</p>
+            </div>
+          </div>
+        ))}
         <div ref={bottomRef} />
       </div>
 
@@ -513,7 +592,7 @@ function Room({
         <button
           type="button"
           onClick={() => void send()}
-          disabled={sending || draft.trim().length === 0}
+          disabled={draft.trim().length === 0}
           aria-label="보내기"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40"
         >

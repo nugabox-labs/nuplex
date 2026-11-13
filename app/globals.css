@@ -185,3 +185,19 @@
     display: none;
   }
 }
+
+/* 채팅 "전송중" — 노랑과 회색 사이를 오가며 깜빡인다. 아직 서버가 받지 않았다는 표시라
+   "전송됨 · 읽음"(노랑 고정)과 한눈에 갈려야 한다(components/chat-panel.tsx). */
+.chat-sending {
+  background-image: linear-gradient(90deg, var(--primary), var(--muted-foreground), var(--primary));
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: chat-sending 1.2s ease-in-out infinite;
+}
+@keyframes chat-sending {
+  0% { background-position: 0% 0; opacity: 1; }
+  50% { background-position: 100% 0; opacity: 0.45; }
+  100% { background-position: 0% 0; opacity: 1; }
+}

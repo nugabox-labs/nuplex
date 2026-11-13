@@ -202,26 +202,58 @@ export async function listMessages(
   }))
 }
 
-/** 여기까지 읽었다고 적는다. 대화를 열거나 새 메시지를 볼 때 부른다. */
-export async function markRead(conversationId: string, profileId: number): Promise<void> {
-  await db.query(
+/**
+ * 여기까지 읽었다고 적는다. 대화를 열거나 새 메시지를 볼 때 부른다.
+ *
+ * 읽은 자리가 실제로 앞으로 갔을 때만 상대에게 알린다(보낸 쪽 화면의 "읽음").
+ * 바뀌지 않았는데도 알리면 서로의 화면이 다시 읽기 → 또 알림으로 끝없이 핑퐁한다.
+ */
+export async function markRead(
+  conversationId: string,
+  profileId: number,
+  { notify = true }: { notify?: boolean } = {},
+): Promise<void> {
+  const row = await queryOne<{ last_read_message_id: string }>(
     `INSERT INTO conversation_read (conversation_id, profile_id, last_read_message_id)
      SELECT $1, $2, coalesce(max(id), 0) FROM message WHERE conversation_id = $1
      ON CONFLICT (conversation_id, profile_id) DO UPDATE SET
-       last_read_message_id = EXCLUDED.last_read_message_id, updated_at = now()`,
+       last_read_message_id = EXCLUDED.last_read_message_id, updated_at = now()
+       WHERE conversation_read.last_read_message_id IS DISTINCT FROM EXCLUDED.last_read_message_id
+     RETURNING last_read_message_id`,
     [conversationId, profileId],
   )
+  if (!row || !notify) return
+
+  const pair = await participants(conversationId)
+  if (!pair) return
+  await db.query(`SELECT pg_notify($1, $2)`, [
+    CHAT_CHANNEL,
+    JSON.stringify({ kind: 'read', conversationId, participants: pair, readerId: profileId }),
+  ])
+}
+
+/** 상대가 어디까지 읽었는지. 내 메시지 옆의 "읽음" 을 가른다. */
+export async function partnerReadId(conversationId: string, profileId: number): Promise<string> {
+  const row = await queryOne<{ last_read_message_id: string }>(
+    `SELECT last_read_message_id FROM conversation_read
+      WHERE conversation_id = $1 AND profile_id <> $2`,
+    [conversationId, profileId],
+  )
+  return String(row?.last_read_message_id ?? 0)
 }
 
 /**
- * 메시지를 보낸다. 저장 → 웹 알림(NOTIFY) → 앱 푸시 순서다.
+ * 메시지를 보낸다. 저장 → 웹 알림(NOTIFY) 까지만 하고 돌아온다.
+ *
+ * 앱 푸시는 여기서 기다리지 않는다 — 기기마다 FCM 을 차례로 부르느라 전송 버튼이
+ * 몇 초씩 묶여 있었다. 돌려준 `push` 를 라우트가 응답을 보낸 뒤에 부른다(`after`).
  * 푸시가 실패해도 메시지는 이미 남아 있다 — 발송 실패로 대화를 잃지 않게 한다.
  */
 export async function sendMessage(
   conversationId: string,
   senderId: number,
   body: string,
-): Promise<ChatMessage | null> {
+): Promise<{ message: ChatMessage; push: () => Promise<void> } | null> {
   const pair = await participants(conversationId)
   if (!pair || !pair.includes(senderId)) return null
   const recipientId = pair[0] === senderId ? pair[1] : pair[0]
@@ -233,10 +265,6 @@ export async function sendMessage(
   )
   if (!row) return null
 
-  await db.query(`UPDATE conversation SET last_message_at = now() WHERE id = $1`, [conversationId])
-  // 보낸 사람은 방금 자기가 쓴 것까지 읽은 상태다.
-  await markRead(conversationId, senderId)
-
   const message: ChatMessage = {
     id: String(row.id),
     conversationId,
@@ -245,19 +273,28 @@ export async function sendMessage(
     createdAt: row.created_at.toISOString(),
   }
 
+  // 서로 기다릴 일이 없는 셋이라 한꺼번에 보낸다.
   // 페이로드에는 식별자만 싣는다. NOTIFY 는 8000바이트 제한이 있어서 본문을 그대로
   // 넣으면 긴 메시지에서 발송이 통째로 실패한다 — 받은 쪽이 다시 읽어 가게 한다.
-  await db.query(`SELECT pg_notify($1, $2)`, [
-    CHAT_CHANNEL,
-    JSON.stringify({ conversationId, messageId: message.id, participants: pair, senderId }),
+  await Promise.all([
+    db.query(`UPDATE conversation SET last_message_at = now() WHERE id = $1`, [conversationId]),
+    // 보낸 사람은 방금 자기가 쓴 것까지 읽은 상태다. 새 메시지 알림이 곧 나가므로
+    // 읽음 알림은 따로 보내지 않는다.
+    markRead(conversationId, senderId, { notify: false }),
+    db.query(`SELECT pg_notify($1, $2)`, [
+      CHAT_CHANNEL,
+      JSON.stringify({ conversationId, messageId: message.id, participants: pair, senderId }),
+    ]),
   ])
 
-  const sender = await queryOne<PartnerRow>(`${PARTNER_SELECT} WHERE p.id = $1`, [senderId])
-  await sendChatPush(recipientId, {
-    title: sender?.name ?? '새 메시지',
-    body,
-    conversationId,
-  })
+  const push = async () => {
+    const sender = await queryOne<PartnerRow>(`${PARTNER_SELECT} WHERE p.id = $1`, [senderId])
+    await sendChatPush(recipientId, {
+      title: sender?.name ?? '새 메시지',
+      body,
+      conversationId,
+    })
+  }
 
-  return message
+  return { message, push }
 }

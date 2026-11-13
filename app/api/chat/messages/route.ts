@@ -1,6 +1,6 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { after, NextResponse, type NextRequest } from 'next/server'
 import { PROFILE_COOKIE, readProfileValue } from '@/lib/auth/session'
-import { listMessages, markRead, sendMessage } from '@/lib/chat'
+import { listMessages, markRead, partnerReadId, sendMessage } from '@/lib/chat'
 
 // 대화 내용 읽기 · 쓰기. 내가 낀 대화가 아니면 404 다 — id 만 알아도 남의 대화를
 // 들여다볼 수 없게 lib/chat.ts 에서 참가자를 확인한다.
@@ -23,8 +23,11 @@ export async function GET(request: NextRequest) {
   }
 
   // 열어서 본 순간 읽은 것으로 본다.
-  await markRead(conversationId, profileId)
-  return NextResponse.json({ messages })
+  const [, partnerRead] = await Promise.all([
+    markRead(conversationId, profileId),
+    partnerReadId(conversationId, profileId),
+  ])
+  return NextResponse.json({ messages, partnerReadId: partnerRead })
 }
 
 export async function POST(request: NextRequest) {
@@ -44,9 +47,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `${MAX_BODY}자까지 보낼 수 있습니다.` }, { status: 400 })
   }
 
-  const message = await sendMessage(conversationId, profileId, body)
-  if (!message) {
+  const sent = await sendMessage(conversationId, profileId, body)
+  if (!sent) {
     return NextResponse.json({ error: '없는 대화입니다.' }, { status: 404 })
   }
-  return NextResponse.json({ message })
+  // 앱 푸시는 응답을 보낸 뒤에 한다. 보낸 사람은 저장까지만 기다리면 된다.
+  after(() => sent.push().catch((error) => console.error('[chat] 푸시 실패:', error)))
+  return NextResponse.json({ message: sent.message })
 }
